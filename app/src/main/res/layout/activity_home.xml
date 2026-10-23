@@ -179,4 +179,21 @@
         android:importantForAccessibility="no"
         android:src="@drawable/cat"
         android:visibility="invisible" />
+
+    <!-- Holding OK on a tile: Move, Hide, App info, Show hidden apps (HomeActivity places it by the tile). -->
+    <com.cosyhome.tv.GlassPanel
+        android:id="@+id/tileMenu"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:padding="10dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/tileMenuItems"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="220dp"
+            android:orientation="vertical" />
+    </com.cosyhome.tv.GlassPanel>
 </FrameLayout>

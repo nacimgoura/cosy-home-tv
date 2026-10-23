@@ -9,5 +9,9 @@
     <string name="usb">USB</string>
     <string name="cant_open">Impossible d\'ouvrir %1$s</string>
     <string name="move_hint">Flèches pour déplacer, OK pour poser</string>
+    <string name="menu_move">Déplacer</string>
+    <string name="menu_hide">Masquer</string>
+    <string name="menu_info">Infos de l\'app</string>
+    <string name="menu_show_hidden">Réafficher les apps masquées (%1$d)</string>
     <string name="not_available">Non disponible sur cette TV</string>
 </resources>

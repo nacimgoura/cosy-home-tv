@@ -45,7 +45,7 @@ import java.util.Set;
 public class HomeActivity extends Activity implements SceneView.Listener {
 
     private static final long MINUTE_MS = 60_000L;
-    private static final String PREFS = "cosy", ORDER_KEY = "tile_order";
+    private static final String PREFS = "cosy", ORDER_KEY = "tile_order", HIDDEN_KEY = "hidden_by_remote";
     private static final int GRID_COLUMNS = 6;
     /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
     private static final int SIDE_DP = 92, COL_GAP_DP = 16, ROW_GAP_DP = 30;
@@ -60,7 +60,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private TextView clock, date, weather;
     private LinearLayout dock, inputs;
     private GridLayout grid;
-    private GlassPanel inputsPanel;
+    private GlassPanel inputsPanel, tileMenu;
+    private LinearLayout tileMenuItems;
     private View root, catTarget;
     private ImageView cat;
     private ValueAnimator catJump;
@@ -153,6 +154,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         inputs = findViewById(R.id.inputs);
         grid = findViewById(R.id.appsGrid);
         inputsPanel = findViewById(R.id.inputsPanel);
+        tileMenu = findViewById(R.id.tileMenu);
+        tileMenuItems = findViewById(R.id.tileMenuItems);
         sources = findViewById(R.id.sources);
         showInputs = Boolean.parseBoolean(getString(R.string.show_inputs));
         if (!showInputs) sources.setVisibility(View.GONE);   // a streaming stick has no inputs
@@ -266,6 +269,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         readPhaseOverride(intent);
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         lastDock = 0;
+        closeTileMenu(false);
         endMove();
         closeInputs();
         focusDock(0);
@@ -274,7 +278,9 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     @Override
     public void onBackPressed() {
-        if (moving >= 0) {
+        if (menuFor >= 0) {
+            closeTileMenu(true);
+        } else if (moving >= 0) {
             endMove();
         } else if (inputsOpen) {
             closeInputs();
@@ -360,7 +366,9 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     /** Reads the apps (banners included), in the order the remote last left them; then builds the tiles. */
     private void loadApps() {
-        List<Apps.App> loaded = Apps.load(this, dockApps, pinnedApps, hiddenApps);
+        Set<String> hide = new HashSet<>(hiddenApps);
+        hide.addAll(hiddenByRemote());
+        List<Apps.App> loaded = Apps.load(this, dockApps, pinnedApps, hide);
         int docked = 0;
         for (Apps.App a : loaded) if (dockApps.contains(a.pkg)) docked++;
         dockCount = Math.min(docked, GRID_COLUMNS);
@@ -410,7 +418,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
                 }
                 moveCat(tile);
             });
-            t.setOnTileHeld(() -> startMove(index));
+            t.setOnTileHeld(() -> showTileMenu(index));
             t.setOnKeyListener((v, keyCode, e) -> e.getAction() == KeyEvent.ACTION_DOWN && onTileKey(index, keyCode, e));
             if (inDock) {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, tileH);
@@ -480,8 +488,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             }
             return isArrow(keyCode);   // Back puts it down (onBackPressed); volume and the rest work as usual
         }
-        if (ok && e.getRepeatCount() > 0) {   // OK held: pick the tile up, whichever of this and the long click comes first
-            startMove(g);
+        if (ok && e.getRepeatCount() > 0) {   // OK held: the tile's menu, whichever of this and the long click comes first
+            showTileMenu(g);
             return true;
         }
         if (ok) return false;   // a click opens the app
@@ -507,6 +515,98 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     private Tile tileAt(int g) {
         return (Tile) (g < dockCount ? dock.getChildAt(g) : grid.getChildAt(g - dockCount));
+    }
+
+    // ---- the tile menu: Move, Hide, App info, Show hidden apps --------------------------------------
+
+    private int menuFor = -1;
+
+    private Set<String> hiddenByRemote() {
+        return new HashSet<>(list(getSharedPreferences(PREFS, MODE_PRIVATE).getString(HIDDEN_KEY, "")));
+    }
+
+    private void saveHiddenByRemote(Set<String> pkgs) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(HIDDEN_KEY, String.join(",", pkgs)).apply();
+    }
+
+    private void showTileMenu(int g) {
+        if (menuFor >= 0 || moving >= 0) return;
+        menuFor = g;
+        Apps.App app = tiles.get(g);
+        tileMenuItems.removeAllViews();
+        addMenuItem(getString(R.string.menu_move), () -> startMove(g));
+        addMenuItem(getString(R.string.menu_hide), () -> hideTile(g));
+        addMenuItem(getString(R.string.menu_info), () -> open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + app.pkg))));
+        int hidden = hiddenByRemote().size();
+        if (hidden > 0) addMenuItem(getString(R.string.menu_show_hidden, hidden), this::showHiddenTiles);
+        // A dropdown: Up and Down walk it and stop at its ends, Left and Right go nowhere.
+        int n = tileMenuItems.getChildCount();
+        for (int i = 0; i < n; i++) {
+            final boolean top = i == 0, bottom = i == n - 1;
+            tileMenuItems.getChildAt(i).setOnKeyListener((v, keyCode, e) -> e.getAction() == KeyEvent.ACTION_DOWN
+                    && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || (keyCode == KeyEvent.KEYCODE_DPAD_UP && top) || (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && bottom)
+                    // The OK still held from opening the menu keeps repeating: only a fresh press picks an item.
+                    || ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && e.getRepeatCount() > 0)));
+        }
+        // Above the tile when it fits, else under it; never past the screen's edges.
+        Tile tile = tileAt(g);
+        tileMenu.setVisibility(View.INVISIBLE);
+        tileMenu.post(() -> {
+            int[] t = new int[2], r = new int[2];
+            tile.getLocationInWindow(t);
+            root.getLocationInWindow(r);
+            int x = t[0] - r[0], y = t[1] - r[1], w = tileMenu.getWidth(), h = tileMenu.getHeight();
+            int top = y - h - dp(14) >= dp(12) ? y - h - dp(14) : y + Math.round(tile.getHeight() * tile.getScaleY()) + dp(14);
+            tileMenu.setX(Math.max(dp(12), Math.min(x, root.getWidth() - w - dp(12))));
+            tileMenu.setY(Math.min(top, root.getHeight() - h - dp(12)));
+            tileMenu.setVisibility(View.VISIBLE);
+            tileMenuItems.getChildAt(0).requestFocus();
+        });
+    }
+
+    private void addMenuItem(String label, Runnable action) {
+        TextView chip = new TextView(this, null, 0, R.style.Chip);
+        chip.setText(label);
+        chip.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START);
+        chip.setTextSize(14f);
+        chip.setOnClickListener(v -> {
+            closeTileMenu(true);
+            action.run();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
+        if (tileMenuItems.getChildCount() > 0) lp.topMargin = dp(6);
+        tileMenuItems.addView(chip, lp);
+    }
+
+    /** Closes the menu; {@code refocus} gives focus back to the tile it was opened on. */
+    private void closeTileMenu(boolean refocus) {
+        if (menuFor < 0) return;
+        int g = menuFor;
+        menuFor = -1;
+        tileMenu.setVisibility(View.GONE);
+        if (refocus && g < tiles.size()) tileAt(g).requestFocus();
+    }
+
+    /** Out of the dock and the grid until "Show hidden apps"; the app itself is untouched. */
+    private void hideTile(int g) {
+        Set<String> hidden = hiddenByRemote();
+        hidden.add(tiles.get(g).pkg);
+        saveHiddenByRemote(hidden);
+        tiles.remove(g);
+        if (g < dockCount) dockCount--;
+        saveOrder();
+        catTarget = null;
+        buildTiles();
+        if (!tiles.isEmpty()) tileAt(Math.min(g, tiles.size() - 1)).requestFocus();
+    }
+
+    private void showHiddenTiles() {
+        saveHiddenByRemote(new HashSet<>());
+        catTarget = null;
+        loadApps();   // they come back where the saved order had them, or after the rest
+        focusDock(lastDock);
     }
 
     // ---- moving a tile ----------------------------------------------------------------------------
