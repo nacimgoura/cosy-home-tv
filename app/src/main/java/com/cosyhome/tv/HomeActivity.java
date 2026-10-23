@@ -174,6 +174,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             pill.setOnKeyListener((v, keyCode, e) -> {
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    navSound(keyCode);
                     focusDock(lastDock);
                     return true;
                 }
@@ -469,6 +470,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             }
             int to = target(g, keyCode);
             if (to >= 0) {
+                navSound(keyCode);
                 Collections.swap(tiles, g, to);
                 saveOrder();
                 buildTiles();
@@ -484,9 +486,18 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         }
         if (ok) return false;   // a click opens the app
         int to = target(g, keyCode);
+        if (to == TO_PILLS || to >= 0) navSound(keyCode);
         if (to == TO_PILLS) firstPill().requestFocus();
         else if (to >= 0) tileAt(to).requestFocus();
         return isArrow(keyCode);
+    }
+
+    /** The system's navigation click: Android plays it only for focus moves it makes itself, and these are ours. */
+    private void navSound(int keyCode) {
+        int dir = keyCode == KeyEvent.KEYCODE_DPAD_UP ? View.FOCUS_UP
+                : keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? View.FOCUS_DOWN
+                : keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? View.FOCUS_LEFT : View.FOCUS_RIGHT;
+        root.playSoundEffect(android.view.SoundEffectConstants.getContantForFocusDirection(dir));
     }
 
     private static boolean isArrow(int keyCode) {
