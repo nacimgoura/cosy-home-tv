@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 final class Tile extends FrameLayout {
 
     static final float FOCUS_SCALE = 1.1f;
+    static final float MOVE_SCALE = 1.18f;
 
     final Apps.App app;
     private final float restAlpha;
@@ -92,6 +93,22 @@ final class Tile extends FrameLayout {
 
     void setOnTileFocused(Consumer<Tile> listener) {
         onFocus = listener;
+    }
+
+    /** Holding OK does this instead of opening the app's settings page (Cosy Home: pick the tile up to move it). */
+    void setOnTileHeld(Runnable action) {
+        setOnLongClickListener(v -> {
+            action.run();
+            return true;
+        });
+    }
+
+    /** Picked up to be moved: larger, and a thicker ring than focus. */
+    void setMoving(boolean moving) {
+        setForeground(getContext().getDrawable(moving ? R.drawable.tile_moving : R.drawable.tile_ring));
+        animate().cancel();
+        float s = moving ? MOVE_SCALE : (hasFocus() ? FOCUS_SCALE : 1f);
+        animate().scaleX(s).scaleY(s).alpha(moving || hasFocus() ? 1f : restAlpha).setDuration(160).start();
     }
 
     private void launch() {

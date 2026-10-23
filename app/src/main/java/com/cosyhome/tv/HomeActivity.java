@@ -45,9 +45,10 @@ import java.util.Set;
 public class HomeActivity extends Activity implements SceneView.Listener {
 
     private static final long MINUTE_MS = 60_000L;
+    private static final String PREFS = "cosy", ORDER_KEY = "tile_order";
     private static final int GRID_COLUMNS = 6;
     /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
-    private static final int SIDE_DP = 72, COL_GAP_DP = 16, ROW_GAP_DP = 30, DIVIDER_GAP_DP = 12;
+    private static final int SIDE_DP = 92, COL_GAP_DP = 16, ROW_GAP_DP = 30;
     /** Dock tiles rest at this opacity until focused, as in the mockup. */
     private static final float DOCK_REST_ALPHA = 0.62f;
     /** OLED care: the clock layer moves through these dp offsets, one step a minute. */
@@ -72,6 +73,11 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private float density;
 
     private boolean inputsOpen;
+    /** Every tile in order: the first dockCount are the dock, the rest the grid under it. */
+    private List<Apps.App> tiles = new ArrayList<>();
+    private int dockCount;
+    /** The tile picked up to be moved (index in tiles), or -1. */
+    private int moving = -1;
     private boolean resumed;
     private boolean showInputs;
     private boolean appsDirty = true;   // the first resume builds the tiles
@@ -235,6 +241,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     @Override
     protected void onPause() {
         super.onPause();
+        endMove();
         resumed = false;
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(weatherTick);
@@ -258,6 +265,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         readPhaseOverride(intent);
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         lastDock = 0;
+        endMove();
         closeInputs();
         focusDock(0);
         page.smoothScrollTo(0, 0);
@@ -265,7 +273,9 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     @Override
     public void onBackPressed() {
-        if (inputsOpen) {
+        if (moving >= 0) {
+            endMove();
+        } else if (inputsOpen) {
             closeInputs();
             sources.requestFocus();
         } else if (dock.getChildCount() > 0 && !dock.hasFocus()) {
@@ -347,96 +357,168 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     // ---- tiles ------------------------------------------------------------------------------------
 
+    /** Reads the apps (banners included), in the order the remote last left them; then builds the tiles. */
     private void loadApps() {
-        List<Apps.App> apps = Apps.load(this, dockApps, pinnedApps, hiddenApps);
+        List<Apps.App> loaded = Apps.load(this, dockApps, pinnedApps, hiddenApps);
+        int docked = 0;
+        for (Apps.App a : loaded) if (dockApps.contains(a.pkg)) docked++;
+        dockCount = Math.min(docked, GRID_COLUMNS);
+        // A saved order wins; apps it does not know (new installs) keep the default order after the known ones.
+        List<String> saved = list(getSharedPreferences(PREFS, MODE_PRIVATE).getString(ORDER_KEY, ""));
+        List<Apps.App> sorted = new ArrayList<>(loaded);
+        if (!saved.isEmpty()) {
+            Collections.sort(sorted, (a, b) -> Integer.compare(rank(saved, a.pkg), rank(saved, b.pkg)));
+        }
+        tiles = sorted;
+        buildTiles();
+    }
+
+    private static int rank(List<String> saved, String pkg) {
+        int i = saved.indexOf(pkg);
+        return i < 0 ? Integer.MAX_VALUE : i;
+    }
+
+    /** Lays the tiles out from {@link #tiles} without reloading anything, so moving a tile stays instant. */
+    private void buildTiles() {
         dock.removeAllViews();
         grid.removeAllViews();
 
         // Six tiles across the width between the side margins, 16:9, in the dock and the grid alike.
         int screenW = getResources().getDisplayMetrics().widthPixels;
-        int colGap = dp(COL_GAP_DP), rowGap = dp(ROW_GAP_DP);
-        int tileW = (screenW - 2 * dp(SIDE_DP) - (GRID_COLUMNS - 1) * colGap) / GRID_COLUMNS;
+        int side = dp(SIDE_DP), colGap = dp(COL_GAP_DP), rowGap = dp(ROW_GAP_DP);
+        int tileW = (screenW - 2 * side - (GRID_COLUMNS - 1) * colGap) / GRID_COLUMNS;
         int tileH = tileW * 9 / 16;
 
-        List<Apps.App> docked = new ArrayList<>(), rest = new ArrayList<>();
-        for (Apps.App a : apps) (dockApps.contains(a.pkg) && docked.size() < GRID_COLUMNS ? docked : rest).add(a);
-        for (int i = 0; i < docked.size(); i++) {
-            final int index = i;
-            Tile t = new Tile(this, docked.get(i), DOCK_REST_ALPHA);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, tileH);
-            if (i > 0) lp.setMarginStart(colGap);
-            t.setOnTileFocused(tile -> {
-                lastDock = index;
-                page.smoothScrollTo(0, 0);   // the dock lives on the clock screen: show all of it
-                moveCat(tile);
-            });
-            final boolean first = i == 0, last = i == docked.size() - 1;
-            t.setOnKeyListener((v, keyCode, e) -> {
-                if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
-                switch (keyCode) {
-                    case KeyEvent.KEYCODE_DPAD_UP:
-                        firstPill().requestFocus();
-                        return true;
-                    case KeyEvent.KEYCODE_DPAD_DOWN:
-                        if (grid.getChildCount() > 0) grid.getChildAt(Math.min(index, grid.getChildCount() - 1)).requestFocus();
-                        return true;
-                    case KeyEvent.KEYCODE_DPAD_LEFT:
-                        return first;
-                    case KeyEvent.KEYCODE_DPAD_RIGHT:
-                        return last;
-                    default:
-                        return false;
-                }
-            });
-            dock.addView(t, lp);
-        }
-
-        // Dock, grid and the hairline between them share the side margins. The hairline sits a little under the
-        // dock, inside its bottom margin, and the grid follows a row gap later (room for the cat), so the top of
-        // the next row still peeks at the bottom of the screen.
-        int side = dp(SIDE_DP);
+        // The rest follow under the dock, the same gap away as one row from the next (it leaves the cat room to
+        // sit): the grid starts up into the dock's bottom margin, so the top of the next row peeks at the bottom.
         android.widget.FrameLayout.LayoutParams dlp = (android.widget.FrameLayout.LayoutParams) dock.getLayoutParams();
         dlp.setMarginStart(side);
-        LinearLayout.LayoutParams vlp = (LinearLayout.LayoutParams) findViewById(R.id.divider).getLayoutParams();
-        vlp.setMarginStart(side);
-        vlp.setMarginEnd(side);
-        vlp.topMargin = -dlp.bottomMargin + dp(DIVIDER_GAP_DP);
         LinearLayout.LayoutParams glp = (LinearLayout.LayoutParams) grid.getLayoutParams();
         glp.setMarginStart(side);
-        glp.topMargin = 0;
+        glp.topMargin = -dlp.bottomMargin;
         grid.setPadding(0, rowGap, 0, grid.getPaddingBottom());
-        for (int i = 0; i < rest.size(); i++) {
-            Tile t = new Tile(this, rest.get(i), 1f);
-            GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-            lp.width = tileW;
-            lp.height = tileH;
-            lp.setMargins(0, 0, i % GRID_COLUMNS == GRID_COLUMNS - 1 ? 0 : colGap, rowGap);
-            t.setOnTileFocused(this::moveCat);
-            final int index = i, col = i % GRID_COLUMNS, count = rest.size();
-            final boolean lastInRow = col == GRID_COLUMNS - 1 || i == count - 1;
-            // Every move is explicit: during a smooth scroll Android's own focus search can land a row off.
-            t.setOnKeyListener((v, keyCode, e) -> {
-                if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
-                switch (keyCode) {
-                    case KeyEvent.KEYCODE_DPAD_UP:
-                        if (index < GRID_COLUMNS) focusDock(col);
-                        else grid.getChildAt(index - GRID_COLUMNS).requestFocus();
-                        return true;
-                    case KeyEvent.KEYCODE_DPAD_DOWN:
-                        // A shorter last row: go to its last tile; on the last row, stay.
-                        int below = Math.min(index + GRID_COLUMNS, count - 1);
-                        if (below / GRID_COLUMNS > index / GRID_COLUMNS) grid.getChildAt(below).requestFocus();
-                        return true;
-                    case KeyEvent.KEYCODE_DPAD_LEFT:
-                        return col == 0;   // stay on the row at its ends instead of wrapping
-                    case KeyEvent.KEYCODE_DPAD_RIGHT:
-                        return lastInRow;
-                    default:
-                        return false;
+
+        for (int g = 0; g < tiles.size(); g++) {
+            final int index = g;
+            boolean inDock = g < dockCount;
+            Tile t = new Tile(this, tiles.get(g), inDock ? DOCK_REST_ALPHA : 1f);
+            t.setOnTileFocused(tile -> {
+                if (index < dockCount) {
+                    lastDock = index;
+                    page.smoothScrollTo(0, 0);   // the dock lives on the clock screen: show all of it
                 }
+                moveCat(tile);
             });
-            grid.addView(t, lp);
+            t.setOnTileHeld(() -> startMove(index));
+            t.setOnKeyListener((v, keyCode, e) -> e.getAction() == KeyEvent.ACTION_DOWN && onTileKey(index, keyCode, e));
+            if (inDock) {
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, tileH);
+                if (g > 0) lp.setMarginStart(colGap);
+                dock.addView(t, lp);
+            } else {
+                int i = g - dockCount;
+                GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
+                lp.width = tileW;
+                lp.height = tileH;
+                lp.setMargins(0, 0, i % GRID_COLUMNS == GRID_COLUMNS - 1 ? 0 : colGap, rowGap);
+                grid.addView(t, lp);
+            }
         }
+    }
+
+    private static final int TO_PILLS = -2, NOWHERE = -1;
+
+    /**
+     * Where a D-pad key goes from tile {@code g}: another tile's index, TO_PILLS or NOWHERE. Every move is explicit:
+     * during a smooth scroll Android's own focus search can land a row off. Rows stop at their ends.
+     */
+    private int target(int g, int keyCode) {
+        int n = tiles.size(), rest = n - dockCount;
+        if (g < dockCount) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_DPAD_UP: return TO_PILLS;
+                case KeyEvent.KEYCODE_DPAD_DOWN: return rest > 0 ? dockCount + Math.min(g, rest - 1) : NOWHERE;
+                case KeyEvent.KEYCODE_DPAD_LEFT: return g > 0 ? g - 1 : NOWHERE;
+                case KeyEvent.KEYCODE_DPAD_RIGHT: return g < dockCount - 1 ? g + 1 : NOWHERE;
+                default: return NOWHERE;
+            }
+        }
+        int i = g - dockCount, col = i % GRID_COLUMNS;
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (i >= GRID_COLUMNS) return g - GRID_COLUMNS;
+                return dockCount > 0 ? Math.min(col, dockCount - 1) : TO_PILLS;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                // A shorter last row: go to its last tile; on the last row, stay.
+                int below = Math.min(i + GRID_COLUMNS, rest - 1);
+                return below / GRID_COLUMNS > i / GRID_COLUMNS ? dockCount + below : NOWHERE;
+            case KeyEvent.KEYCODE_DPAD_LEFT: return col > 0 ? g - 1 : NOWHERE;
+            case KeyEvent.KEYCODE_DPAD_RIGHT: return col < GRID_COLUMNS - 1 && i < rest - 1 ? g + 1 : NOWHERE;
+            default: return NOWHERE;
+        }
+    }
+
+    private boolean onTileKey(int g, int keyCode, KeyEvent e) {
+        boolean ok = keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
+        if (moving >= 0) {
+            // The OK still held from picking the tile up keeps repeating: only a fresh press puts it down.
+            if (ok && e.getRepeatCount() > 0) return true;
+            if (ok) {
+                endMove();
+                return true;
+            }
+            int to = target(g, keyCode);
+            if (to >= 0) {
+                Collections.swap(tiles, g, to);
+                saveOrder();
+                buildTiles();
+                moving = to;
+                tileAt(to).requestFocus();
+                tileAt(to).setMoving(true);
+            }
+            return isArrow(keyCode);   // Back puts it down (onBackPressed); volume and the rest work as usual
+        }
+        if (ok && e.getRepeatCount() > 0) {   // OK held: pick the tile up, whichever of this and the long click comes first
+            startMove(g);
+            return true;
+        }
+        if (ok) return false;   // a click opens the app
+        int to = target(g, keyCode);
+        if (to == TO_PILLS) firstPill().requestFocus();
+        else if (to >= 0) tileAt(to).requestFocus();
+        return isArrow(keyCode);
+    }
+
+    private static boolean isArrow(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
+    }
+
+    private Tile tileAt(int g) {
+        return (Tile) (g < dockCount ? dock.getChildAt(g) : grid.getChildAt(g - dockCount));
+    }
+
+    // ---- moving a tile ----------------------------------------------------------------------------
+
+    /** Holding OK picks the tile up: the arrows move it (dock and grid alike), OK or Back puts it down. */
+    private void startMove(int g) {
+        if (moving == g) return;
+        moving = g;
+        tileAt(g).setMoving(true);
+        Toast.makeText(this, R.string.move_hint, Toast.LENGTH_SHORT).show();
+    }
+
+    private void endMove() {
+        if (moving < 0) return;
+        Tile t = tileAt(moving);
+        moving = -1;
+        if (t != null) t.setMoving(false);
+    }
+
+    private void saveOrder() {
+        StringBuilder sb = new StringBuilder();
+        for (Apps.App a : tiles) sb.append(sb.length() == 0 ? "" : ",").append(a.pkg);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(ORDER_KEY, sb.toString()).apply();
     }
 
     private View firstPill() {
@@ -609,8 +691,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     }
 
     private List<String> list(int resId) {
+        return list(getString(resId));
+    }
+
+    private static List<String> list(String csv) {
         List<String> out = new ArrayList<>();
-        for (String s : getString(resId).split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
+        for (String s : csv.split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
         return out;
     }
 

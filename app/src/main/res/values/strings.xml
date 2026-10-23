@@ -8,5 +8,6 @@
     <string name="live_tv">TV en direct</string>
     <string name="usb">USB</string>
     <string name="cant_open">Impossible d\'ouvrir %1$s</string>
+    <string name="move_hint">Flèches pour déplacer, OK pour poser</string>
     <string name="not_available">Non disponible sur cette TV</string>
 </resources>
