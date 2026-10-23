@@ -70,6 +70,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     private boolean appsOpen;
     private boolean resumed;
+    private boolean showInputs;
     private boolean appsDirty = true;   // the first resume builds the tiles
     /** Survives the activity being recreated while an app is open; resets only with the process. */
     private static int lastDock = 0;
@@ -146,7 +147,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         grid = findViewById(R.id.appsGrid);
         appsPanel = findViewById(R.id.appsPanel);
         inputsPanel = findViewById(R.id.inputsPanel);
-        inputsPanel.setVisibility(View.GONE);   // a Fire TV stick has no inputs; the apps panel takes the room
+        showInputs = Boolean.parseBoolean(getString(R.string.show_inputs));
+        if (showInputs) {
+            appsPanel.getLayoutParams().height = dp(320);   // leave the room under it to the Inputs strip
+        } else {
+            inputsPanel.setVisibility(View.GONE);   // a streaming stick has no inputs: the apps panel takes the room
+        }
         root = findViewById(R.id.root);
         cat = findViewById(R.id.cat);
         // Keep the cat on its tile while the tile zooms, the grid scrolls or the clock layer drifts.
@@ -216,6 +222,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             catTarget = null;   // new tiles: the cat sits on the focused one instead of jumping there
             loadApps();
         }
+        if (showInputs) buildInputs();
         minuteTick.run();
         if (located) handler.postDelayed(weatherTick, Weather.stale(this) ? 0 : Weather.REFRESH_MS);
         scene.setRunning(true);

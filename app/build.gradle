@@ -33,7 +33,7 @@ android {
         versionName '1.0'
 
         ['location.name', 'location.latitude', 'location.longitude', 'dock', 'pinned', 'hidden',
-         'live_tv_package', 'usb_package', 'ambilight_action'].each { key ->
+         'live_tv_package', 'usb_package', 'ambilight_action', 'show_inputs'].each { key ->
             resValue 'string', key.replace('.', '_'), resString(settings.getProperty(key, ''))
         }
     }
