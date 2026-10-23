@@ -39,42 +39,44 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Cosy Home: a clock over a valley that follows the sun, a dock of six apps, and on Down a
- * frosted panel with every app and the TV's inputs.
+ * Cosy Home: a clock over a valley that follows the sun, a dock of six apps with the rest of the apps
+ * following under it on one page (Down scrolls them up), and top-right Sources, Wi-Fi and Settings pills.
  */
 public class HomeActivity extends Activity implements SceneView.Listener {
 
     private static final long MINUTE_MS = 60_000L;
     private static final int GRID_COLUMNS = 6;
+    /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
+    private static final int SIDE_DP = 48, COL_GAP_DP = 16, ROW_GAP_DP = 30;
     /** Dock tiles rest at this opacity until focused, as in the mockup. */
     private static final float DOCK_REST_ALPHA = 0.62f;
     /** OLED care: the clock layer moves through these dp offsets, one step a minute. */
     private static final int[][] SHIFT_DP = {{0, 0}, {3, 2}, {5, -1}, {2, -4}, {-2, -3}, {-4, 1}, {-1, 4}};
 
     private SceneView scene;
-    private View homeLayer, appsLayer;
-    private TextView clock, date, weather, headerTime, focusedName;
+    private View homeLayer, sources;
+    private RoomyScrollView page;
+    private TextView clock, date, weather;
     private LinearLayout dock, inputs;
     private GridLayout grid;
-    private GlassPanel appsPanel, inputsPanel;
+    private GlassPanel inputsPanel;
     private View root, catTarget;
     private ImageView cat;
     private ValueAnimator catJump;
 
     private List<String> dockApps, pinnedApps;
     private Set<String> hiddenApps;
-    private String liveTvPkg, usbPkg, ambilightAction, place;
+    private String liveTvPkg, usbPkg, place;
     private double lat, lon;
     private boolean located;
     private float density;
 
-    private boolean appsOpen;
+    private boolean inputsOpen;
     private boolean resumed;
     private boolean showInputs;
     private boolean appsDirty = true;   // the first resume builds the tiles
     /** Survives the activity being recreated while an app is open; resets only with the process. */
     private static int lastDock = 0;
-    private static int lastGrid = 0;
     /** Preview a phase from adb: `am start -n com.cosyhome.tv/.HomeActivity --es phase day` ("auto" clears it). */
     private static SceneView.Phase forcedPhase;
     private int shiftStep;
@@ -124,7 +126,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         hiddenApps = new HashSet<>(list(R.string.hidden));
         liveTvPkg = getString(R.string.live_tv_package);
         usbPkg = getString(R.string.usb_package);
-        ambilightAction = getString(R.string.ambilight_action);
         place = getString(R.string.location_name);
         try {
             lat = Double.parseDouble(getString(R.string.location_latitude));
@@ -135,24 +136,20 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         }
 
         scene = findViewById(R.id.scene);
+        page = findViewById(R.id.page);
         homeLayer = findViewById(R.id.homeLayer);
-        appsLayer = findViewById(R.id.appsLayer);
+        // The clock screen is exactly the first screen, so the dock sits at its bottom and the grid starts below.
+        homeLayer.getLayoutParams().height = getResources().getDisplayMetrics().heightPixels;
         clock = findViewById(R.id.clock);
         date = findViewById(R.id.date);
         weather = findViewById(R.id.weather);
-        headerTime = findViewById(R.id.headerTime);
-        focusedName = findViewById(R.id.focusedName);
         dock = findViewById(R.id.dock);
         inputs = findViewById(R.id.inputs);
         grid = findViewById(R.id.appsGrid);
-        appsPanel = findViewById(R.id.appsPanel);
         inputsPanel = findViewById(R.id.inputsPanel);
+        sources = findViewById(R.id.sources);
         showInputs = Boolean.parseBoolean(getString(R.string.show_inputs));
-        if (showInputs) {
-            appsPanel.getLayoutParams().height = dp(320);   // leave the room under it to the Inputs strip
-        } else {
-            inputsPanel.setVisibility(View.GONE);   // a streaming stick has no inputs: the apps panel takes the room
-        }
+        if (!showInputs) sources.setVisibility(View.GONE);   // a streaming stick has no inputs
         root = findViewById(R.id.root);
         cat = findViewById(R.id.cat);
         // Keep the cat on its tile while the tile zooms, the grid scrolls or the clock layer drifts.
@@ -162,20 +159,26 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         });
         scene.setListener(this);
 
-        findViewById(R.id.back).setOnClickListener(v -> closeApps());
-        View ambilight = findViewById(R.id.ambilight);
-        if (ambilightAction.isEmpty()
-                || getPackageManager().resolveActivity(new Intent(ambilightAction), 0) == null) {
-            ambilight.setVisibility(View.GONE);
+        View wifi = findViewById(R.id.wifi), settings = findViewById(R.id.settings);
+        sources.setOnClickListener(v -> openInputs());
+        wifi.setOnClickListener(v -> open(wifiIntent()));
+        settings.setOnClickListener(v -> open(settingsIntent()));
+        // The pills are the top of the screen: Up goes nowhere, and the row's ends do not fall through.
+        for (View pill : new View[]{sources, wifi, settings}) {
+            pill.setOnKeyListener((v, keyCode, e) -> {
+                if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    focusDock(lastDock);
+                    return true;
+                }
+                return keyCode == KeyEvent.KEYCODE_DPAD_UP
+                        || (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v == firstPill())
+                        || (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v == settings);
+            });
+            pill.setOnFocusChangeListener((v, focused) -> {
+                if (focused) page.smoothScrollTo(0, 0);
+            });
         }
-        ambilight.setOnClickListener(v -> open(new Intent(ambilightAction)));
-        findViewById(R.id.settings).setOnClickListener(v -> open(settingsIntent()));
-        // The header row is the top of the screen: Up goes nowhere rather than wrapping around.
-        View.OnKeyListener topRow = (v, keyCode, e) ->
-                e.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP;
-        findViewById(R.id.back).setOnKeyListener(topRow);
-        findViewById(R.id.ambilight).setOnKeyListener(topRow);
-        findViewById(R.id.settings).setOnKeyListener(topRow);
 
         weather.setText(weatherLine(Weather.cached(this)));
         readPhaseOverride(getIntent());
@@ -255,14 +258,20 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         readPhaseOverride(intent);
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         lastDock = 0;
-        if (appsOpen) closeApps();
-        else focusDock(0);
+        closeInputs();
+        focusDock(0);
+        page.smoothScrollTo(0, 0);
     }
 
     @Override
     public void onBackPressed() {
-        if (appsOpen) closeApps();
-        // On the clock screen Back goes nowhere: this is home.
+        if (inputsOpen) {
+            closeInputs();
+            sources.requestFocus();
+        } else if (dock.getChildCount() > 0 && !dock.hasFocus()) {
+            focusDock(lastDock);   // from the grid or the pills, back to the dock and the clock
+        }
+        // On the dock Back goes nowhere: this is home.
     }
 
     // ---- scene, clock and weather -----------------------------------------------------------------
@@ -274,7 +283,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
                 : p == SceneView.Phase.DAY ? 0x6B0E222E
                 : p == SceneView.Phase.DUSK ? 0x5C1E1028 : 0x6B0A0E1E;
         GlassPanel.setSource(scene.blurred(), glassTint);
-        appsPanel.invalidate();
         inputsPanel.invalidate();
         int text = p == SceneView.Phase.DAY ? 0xFF12222C
                 : p == SceneView.Phase.DAWN ? 0xFFFFF8F0
@@ -289,7 +297,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         Locale locale = Locale.FRANCE;   // the stick's system language is English; the home screen is French
         String hm = new SimpleDateFormat(DateFormat.is24HourFormat(this) ? "HH:mm" : "h:mm", locale).format(now);
         clock.setText(hm);
-        headerTime.setText(hm);
         String day = new SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "EEEEdMMMM"), locale).format(now);
         date.setText(day.substring(0, 1).toUpperCase(locale) + day.substring(1));   // "vendredi" -> "Vendredi"
         scene.setPhase(forcedPhase != null ? forcedPhase : phaseAt(now.getTime()));
@@ -345,26 +352,33 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         dock.removeAllViews();
         grid.removeAllViews();
 
-        int dockW = dp(115), dockH = dp(65), dockGap = dp(15);
-        List<Apps.App> docked = new ArrayList<>();
-        for (Apps.App a : apps) if (dockApps.contains(a.pkg)) docked.add(a);
+        // Six tiles across the width between the side margins, 16:9, in the dock and the grid alike.
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int colGap = dp(COL_GAP_DP), rowGap = dp(ROW_GAP_DP);
+        int tileW = (screenW - 2 * dp(SIDE_DP) - (GRID_COLUMNS - 1) * colGap) / GRID_COLUMNS;
+        int tileH = tileW * 9 / 16;
+
+        List<Apps.App> docked = new ArrayList<>(), rest = new ArrayList<>();
+        for (Apps.App a : apps) (dockApps.contains(a.pkg) && docked.size() < GRID_COLUMNS ? docked : rest).add(a);
         for (int i = 0; i < docked.size(); i++) {
             final int index = i;
             Tile t = new Tile(this, docked.get(i), DOCK_REST_ALPHA);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dockW, dockH);
-            if (i > 0) lp.setMarginStart(dockGap);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, tileH);
+            if (i > 0) lp.setMarginStart(colGap);
             t.setOnTileFocused(tile -> {
                 lastDock = index;
+                page.smoothScrollTo(0, 0);   // the dock lives on the clock screen: show all of it
                 moveCat(tile);
             });
             final boolean first = i == 0, last = i == docked.size() - 1;
             t.setOnKeyListener((v, keyCode, e) -> {
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
                 switch (keyCode) {
-                    case KeyEvent.KEYCODE_DPAD_DOWN:
-                        openApps();
-                        return true;
                     case KeyEvent.KEYCODE_DPAD_UP:
+                        firstPill().requestFocus();
+                        return true;
+                    case KeyEvent.KEYCODE_DPAD_DOWN:
+                        if (grid.getChildCount() > 0) grid.getChildAt(Math.min(index, grid.getChildCount() - 1)).requestFocus();
                         return true;
                     case KeyEvent.KEYCODE_DPAD_LEFT:
                         return first;
@@ -377,42 +391,52 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             dock.addView(t, lp);
         }
 
-        int cellW = dp(120), cellH = dp(68), colGap = dp(16), rowGap = dp(14);
-        for (int i = 0; i < apps.size(); i++) {
-            final int index = i;
-            Tile t = new Tile(this, apps.get(i), 1f);
+        // The rest follow under the dock, the same gap away as one row from the next (it leaves the cat room to
+        // sit): the grid starts up into the dock's bottom margin, so the top of the next row peeks at the bottom.
+        grid.setPadding(0, rowGap, 0, grid.getPaddingBottom());
+        ((LinearLayout.LayoutParams) grid.getLayoutParams()).topMargin =
+                -((android.widget.FrameLayout.LayoutParams) dock.getLayoutParams()).bottomMargin;
+        for (int i = 0; i < rest.size(); i++) {
+            Tile t = new Tile(this, rest.get(i), 1f);
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-            lp.width = cellW;
-            lp.height = cellH;
+            lp.width = tileW;
+            lp.height = tileH;
             lp.setMargins(0, 0, i % GRID_COLUMNS == GRID_COLUMNS - 1 ? 0 : colGap, rowGap);
-            t.setOnTileFocused(tile -> {
-                lastGrid = index;
-                focusedName.setText(tile.app.label);
-                moveCat(tile);
-            });
-            final int col = i % GRID_COLUMNS;
-            final boolean lastInRow = col == GRID_COLUMNS - 1 || i == apps.size() - 1;
+            t.setOnTileFocused(this::moveCat);
+            final int index = i, col = i % GRID_COLUMNS, count = rest.size();
+            final boolean lastInRow = col == GRID_COLUMNS - 1 || i == count - 1;
+            // Every move is explicit: during a smooth scroll Android's own focus search can land a row off.
             t.setOnKeyListener((v, keyCode, e) -> {
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
-                // Stay on the row at its ends instead of wrapping to the next one.
-                return (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && col == 0)
-                        || (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && lastInRow);
+                switch (keyCode) {
+                    case KeyEvent.KEYCODE_DPAD_UP:
+                        if (index < GRID_COLUMNS) focusDock(col);
+                        else grid.getChildAt(index - GRID_COLUMNS).requestFocus();
+                        return true;
+                    case KeyEvent.KEYCODE_DPAD_DOWN:
+                        // A shorter last row: go to its last tile; on the last row, stay.
+                        int below = Math.min(index + GRID_COLUMNS, count - 1);
+                        if (below / GRID_COLUMNS > index / GRID_COLUMNS) grid.getChildAt(below).requestFocus();
+                        return true;
+                    case KeyEvent.KEYCODE_DPAD_LEFT:
+                        return col == 0;   // stay on the row at its ends instead of wrapping
+                    case KeyEvent.KEYCODE_DPAD_RIGHT:
+                        return lastInRow;
+                    default:
+                        return false;
+                }
             });
             grid.addView(t, lp);
         }
     }
 
+    private View firstPill() {
+        return sources.getVisibility() == View.VISIBLE ? sources : findViewById(R.id.wifi);
+    }
+
     private void focusDock(int index) {
         if (dock.getChildCount() == 0) return;
         dock.getChildAt(Math.max(0, Math.min(index, dock.getChildCount() - 1))).requestFocus();
-    }
-
-    private void focusGrid(int index) {
-        if (grid.getChildCount() == 0) {
-            findViewById(R.id.back).requestFocus();
-            return;
-        }
-        grid.getChildAt(Math.max(0, Math.min(index, grid.getChildCount() - 1))).requestFocus();
     }
 
     // ---- the black cat ----------------------------------------------------------------------------
@@ -467,41 +491,36 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     }
 
     private void restoreFocus() {
-        if (appsOpen) focusGrid(lastGrid);
-        else focusDock(lastDock);
+        if (inputsOpen) return;
+        View f = getCurrentFocus();
+        if (f == null || !f.isAttachedToWindow()) focusDock(lastDock);   // after a rebuild; else keep the place
     }
 
-    // ---- the apps panel ---------------------------------------------------------------------------
+    // ---- the Sources dropdown ---------------------------------------------------------------------
 
-    private void openApps() {
-        if (appsOpen) return;
-        appsOpen = true;
-        appsLayer.setAlpha(0f);
-        appsLayer.setTranslationY(dp(16));
-        appsLayer.setVisibility(View.VISIBLE);
-        appsLayer.animate().alpha(1f).translationY(0f).setDuration(220).start();
-        homeLayer.animate().alpha(0f).setDuration(160)
-                .withEndAction(() -> homeLayer.setVisibility(View.INVISIBLE)).start();
-        // The grid starts with the dock apps, so the same app stays focused.
-        lastGrid = lastDock;
-        focusGrid(lastGrid);
+    private void openInputs() {
+        if (inputs.getChildCount() == 0) {
+            Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        inputsOpen = true;
+        inputsPanel.setAlpha(0f);
+        inputsPanel.setVisibility(View.VISIBLE);
+        inputsPanel.animate().alpha(1f).setDuration(160).start();
+        inputs.getChildAt(0).requestFocus();
     }
 
-    private void closeApps() {
-        if (!appsOpen) return;
-        appsOpen = false;
-        homeLayer.setVisibility(View.VISIBLE);
-        homeLayer.animate().alpha(1f).setDuration(220).start();
-        appsLayer.animate().alpha(0f).translationY(dp(16)).setDuration(160)
-                .withEndAction(() -> appsLayer.setVisibility(View.GONE)).start();
-        focusDock(lastDock);
+    private void closeInputs() {
+        if (!inputsOpen) return;
+        inputsOpen = false;
+        inputsPanel.setVisibility(View.GONE);
     }
 
     // ---- inputs -----------------------------------------------------------------------------------
 
     /** Live TV, the HDMI ports in order, and USB media. Rebuilt on every resume. */
     private void buildInputs() {
-        while (inputs.getChildCount() > 1) inputs.removeViewAt(1);
+        inputs.removeAllViews();
 
         Intent liveTv = getPackageManager().getLeanbackLaunchIntentForPackage(liveTvPkg);
         if (liveTv != null) addInputChip(getString(R.string.live_tv), () -> open(liveTv));
@@ -526,19 +545,28 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         Intent usb = getPackageManager().getLeanbackLaunchIntentForPackage(usbPkg);
         if (usb != null) addInputChip(getString(R.string.usb), () -> open(usb));
 
-        // Bottom of the screen: Down stays put.
-        for (int i = 1; i < inputs.getChildCount(); i++) {
-            inputs.getChildAt(i).setOnKeyListener((v, keyCode, e) ->
-                    e.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN);
+        // A dropdown: Up and Down walk the list and stop at its ends, Left and Right go nowhere.
+        int n = inputs.getChildCount();
+        for (int i = 0; i < n; i++) {
+            final boolean top = i == 0, bottom = i == n - 1;
+            inputs.getChildAt(i).setOnKeyListener((v, keyCode, e) -> e.getAction() == KeyEvent.ACTION_DOWN
+                    && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || (keyCode == KeyEvent.KEYCODE_DPAD_UP && top) || (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && bottom)));
         }
+        if (n == 0) sources.setVisibility(View.GONE);   // no input on this set after all
     }
 
     private void addInputChip(String label, Runnable action) {
         TextView chip = new TextView(this, null, 0, R.style.Chip);
         chip.setText(label);
-        chip.setOnClickListener(v -> action.run());
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34));
-        lp.setMarginStart(dp(8));
+        chip.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START);
+        chip.setTextSize(14f);
+        chip.setOnClickListener(v -> {
+            closeInputs();
+            action.run();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
+        if (inputs.getChildCount() > 0) lp.topMargin = dp(6);
         inputs.addView(chip, lp);
     }
 
@@ -546,6 +574,14 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private void openInput(String inputId) {
         Uri uri = TvContract.buildChannelUriForPassthroughInput(inputId);
         open(new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel"));
+    }
+
+    /** Wi-Fi settings; where the TV answers that with nothing usable (Fire OS), the Settings menu instead. */
+    private Intent wifiIntent() {
+        Intent wifi = new Intent(Settings.ACTION_WIFI_SETTINGS);
+        android.content.pm.ResolveInfo ri = getPackageManager().resolveActivity(wifi, 0);
+        boolean usable = ri != null && ri.activityInfo != null && !ri.activityInfo.name.contains("CTSDummy");
+        return usable ? wifi : settingsIntent();
     }
 
     /** Fire OS answers ACTION_SETTINGS with a stub that lands on Amazon's home; its real menu lives in its launcher. */
