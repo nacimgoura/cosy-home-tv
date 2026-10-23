@@ -62,21 +62,6 @@
                 android:textSize="16sp" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/hint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:layout_marginStart="60dp"
-            android:layout_marginBottom="112dp"
-            android:drawableStart="@drawable/ic_chevron_down"
-            android:drawablePadding="5dp"
-            android:drawableTint="#E6FFFFFF"
-            android:fontFamily="@font/outfit"
-            android:fontVariationSettings="'wght' 500"
-            android:text="@string/all_apps_hint"
-            android:textColor="#E6FFFFFF"
-            android:textSize="12sp" />
 
         <LinearLayout
             android:id="@+id/dock"
@@ -150,7 +135,7 @@
         <com.cosyhome.tv.GlassPanel
             android:id="@+id/appsPanel"
             android:layout_width="match_parent"
-            android:layout_height="320dp"
+            android:layout_height="420dp"
             android:layout_marginStart="48dp"
             android:layout_marginTop="80dp"
             android:layout_marginEnd="48dp"
@@ -211,7 +196,7 @@
                         android:clipToPadding="false"
                         android:columnCount="6"
                         android:paddingStart="8dp"
-                        android:paddingTop="8dp"
+                        android:paddingTop="36dp"
                         android:paddingEnd="8dp"
                         android:paddingBottom="8dp"
                         android:useDefaultMargins="false" />
@@ -248,4 +233,14 @@
             </LinearLayout>
         </com.cosyhome.tv.GlassPanel>
     </FrameLayout>
+
+    <!-- The black cat sits on the focused tile and jumps to the next one (HomeActivity.moveCat). -->
+    <ImageView
+        android:id="@+id/cat"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_gravity="top|start"
+        android:importantForAccessibility="no"
+        android:src="@drawable/cat"
+        android:visibility="invisible" />
 </FrameLayout>

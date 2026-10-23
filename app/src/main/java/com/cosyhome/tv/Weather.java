@@ -77,22 +77,22 @@ final class Weather {
     /** WMO weather interpretation codes, as Open-Meteo documents them. */
     static String describe(int code) {
         switch (code) {
-            case 0: return "Clear";
-            case 1: return "Mostly clear";
-            case 2: return "Partly cloudy";
-            case 3: return "Overcast";
-            case 45: case 48: return "Fog";
-            case 51: case 53: case 55: return "Drizzle";
-            case 56: case 57: return "Freezing drizzle";
-            case 61: return "Light rain";
-            case 63: return "Rain";
-            case 65: return "Heavy rain";
-            case 66: case 67: return "Freezing rain";
-            case 71: case 73: case 75: case 77: return "Snow";
-            case 80: case 81: case 82: return "Showers";
-            case 85: case 86: return "Snow showers";
-            case 95: return "Thunderstorm";
-            case 96: case 99: return "Thunderstorm and hail";
+            case 0: return "Ciel dégagé";
+            case 1: return "Plutôt dégagé";
+            case 2: return "Partiellement nuageux";
+            case 3: return "Couvert";
+            case 45: case 48: return "Brouillard";
+            case 51: case 53: case 55: return "Bruine";
+            case 56: case 57: return "Bruine verglaçante";
+            case 61: return "Pluie légère";
+            case 63: return "Pluie";
+            case 65: return "Forte pluie";
+            case 66: case 67: return "Pluie verglaçante";
+            case 71: case 73: case 75: case 77: return "Neige";
+            case 80: case 81: case 82: return "Averses";
+            case 85: case 86: return "Averses de neige";
+            case 95: return "Orage";
+            case 96: case 99: return "Orage et grêle";
             default: return "";
         }
     }

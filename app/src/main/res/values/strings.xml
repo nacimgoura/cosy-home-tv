@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Keep "Cosy Home": cosy-redirect finds the tile on Amazon's home by this label. -->
     <string name="app_name">Cosy Home</string>
-    <string name="all_apps_hint">All apps and inputs</string>
-    <string name="back_to_clock">Back to clock</string>
-    <string name="apps">Apps</string>
-    <string name="inputs">Inputs</string>
+    <string name="all_apps_hint">Toutes les applications</string>
+    <string name="back_to_clock">Retour à l\'horloge</string>
+    <string name="apps">Applications</string>
+    <string name="inputs">Entrées</string>
     <string name="ambilight">Ambilight</string>
-    <string name="settings">Settings</string>
-    <string name="live_tv">Live TV</string>
+    <string name="settings">Paramètres</string>
+    <string name="live_tv">TV en direct</string>
     <string name="usb">USB</string>
-    <string name="cant_open">Can\'t open %1$s</string>
-    <string name="not_available">Not available on this TV</string>
+    <string name="cant_open">Impossible d\'ouvrir %1$s</string>
+    <string name="not_available">Non disponible sur cette TV</string>
 </resources>

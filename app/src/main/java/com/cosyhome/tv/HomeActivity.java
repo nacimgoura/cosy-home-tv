@@ -18,7 +18,12 @@ import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.view.KeyEvent;
 import android.view.View;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.GridLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -52,6 +57,9 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private LinearLayout dock, inputs;
     private GridLayout grid;
     private GlassPanel appsPanel, inputsPanel;
+    private View root, catTarget;
+    private ImageView cat;
+    private ValueAnimator catJump;
 
     private List<String> dockApps, pinnedApps;
     private Set<String> hiddenApps;
@@ -61,6 +69,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private float density;
 
     private boolean appsOpen;
+    private boolean resumed;
+    private boolean appsDirty = true;   // the first resume builds the tiles
     /** Survives the activity being recreated while an app is open; resets only with the process. */
     private static int lastDock = 0;
     private static int lastGrid = 0;
@@ -92,6 +102,10 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             // Updates send REMOVED then ADDED; wait for the new APK instead of dropping the tile.
             if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
                     && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
+            if (!resumed) {
+                appsDirty = true;   // rebuild on the next resume, not behind an app
+                return;
+            }
             loadApps();
             restoreFocus();
         }
@@ -132,6 +146,14 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         grid = findViewById(R.id.appsGrid);
         appsPanel = findViewById(R.id.appsPanel);
         inputsPanel = findViewById(R.id.inputsPanel);
+        inputsPanel.setVisibility(View.GONE);   // a Fire TV stick has no inputs; the apps panel takes the room
+        root = findViewById(R.id.root);
+        cat = findViewById(R.id.cat);
+        // Keep the cat on its tile while the tile zooms, the grid scrolls or the clock layer drifts.
+        root.getViewTreeObserver().addOnPreDrawListener(() -> {
+            if (catJump == null && catTarget != null) pinCat();
+            return true;
+        });
         scene.setListener(this);
 
         findViewById(R.id.back).setOnClickListener(v -> closeApps());
@@ -141,7 +163,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             ambilight.setVisibility(View.GONE);
         }
         ambilight.setOnClickListener(v -> open(new Intent(ambilightAction)));
-        findViewById(R.id.settings).setOnClickListener(v -> open(new Intent(Settings.ACTION_SETTINGS)));
+        findViewById(R.id.settings).setOnClickListener(v -> open(settingsIntent()));
         // The header row is the top of the screen: Up goes nowhere rather than wrapping around.
         View.OnKeyListener topRow = (v, keyCode, e) ->
                 e.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP;
@@ -151,6 +173,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
         weather.setText(weatherLine(Weather.cached(this)));
         readPhaseOverride(getIntent());
+        registerPackageReceiver();
     }
 
     private static void readPhaseOverride(Intent intent) {
@@ -163,9 +186,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
+    /** Registered for the activity's whole life, so an install while an app is in front still marks the tiles stale. */
+    private void registerPackageReceiver() {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_PACKAGE_ADDED);
         filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
@@ -176,8 +198,24 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         } else {
             registerReceiver(packageReceiver, filter);
         }
-        loadApps();
-        buildInputs();
+    }
+
+    @Override
+    protected void onDestroy() {
+        unregisterReceiver(packageReceiver);
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        // Rebuilding the tiles reloads every banner: only when an app was installed or removed meanwhile.
+        if (appsDirty) {
+            appsDirty = false;
+            catTarget = null;   // new tiles: the cat sits on the focused one instead of jumping there
+            loadApps();
+        }
         minuteTick.run();
         if (located) handler.postDelayed(weatherTick, Weather.stale(this) ? 0 : Weather.REFRESH_MS);
         scene.setRunning(true);
@@ -187,17 +225,20 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(packageReceiver);
+        resumed = false;
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(weatherTick);
         scene.setRunning(false);
     }
 
-    /** Out of sight behind an app: give the scene's 8 MB back while Netflix and friends need it. */
+    /**
+     * Keep the scene while an app is in front, so Home comes back without redrawing it (Amazon's home shows meanwhile
+     * on Fire OS). Give its 8 MB back only when Android runs short of memory.
+     */
     @Override
-    protected void onStop() {
-        super.onStop();
-        scene.release();
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_MODERATE) scene.release();
     }
 
     /** Home pressed while already home: back to the clock with the first dock app focused. */
@@ -238,11 +279,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     private void tick() {
         Date now = new Date();
-        Locale locale = Locale.getDefault();
+        Locale locale = Locale.FRANCE;   // the stick's system language is English; the home screen is French
         String hm = new SimpleDateFormat(DateFormat.is24HourFormat(this) ? "HH:mm" : "h:mm", locale).format(now);
         clock.setText(hm);
         headerTime.setText(hm);
-        date.setText(new SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "EEEEdMMMM"), locale).format(now));
+        String day = new SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "EEEEdMMMM"), locale).format(now);
+        date.setText(day.substring(0, 1).toUpperCase(locale) + day.substring(1));   // "vendredi" -> "Vendredi"
         scene.setPhase(forcedPhase != null ? forcedPhase : phaseAt(now.getTime()));
     }
 
@@ -304,7 +346,10 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             Tile t = new Tile(this, docked.get(i), DOCK_REST_ALPHA);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dockW, dockH);
             if (i > 0) lp.setMarginStart(dockGap);
-            t.setOnTileFocused(tile -> lastDock = index);
+            t.setOnTileFocused(tile -> {
+                lastDock = index;
+                moveCat(tile);
+            });
             final boolean first = i == 0, last = i == docked.size() - 1;
             t.setOnKeyListener((v, keyCode, e) -> {
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
@@ -336,6 +381,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             t.setOnTileFocused(tile -> {
                 lastGrid = index;
                 focusedName.setText(tile.app.label);
+                moveCat(tile);
             });
             final int col = i % GRID_COLUMNS;
             final boolean lastInRow = col == GRID_COLUMNS - 1 || i == apps.size() - 1;
@@ -360,6 +406,57 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             return;
         }
         grid.getChildAt(Math.max(0, Math.min(index, grid.getChildCount() - 1))).requestFocus();
+    }
+
+    // ---- the black cat ----------------------------------------------------------------------------
+
+    /** Where the cat sits on a tile: centred on its top edge, as the tile is drawn now (zoom included). */
+    private float[] catSpot(View tile) {
+        int[] t = new int[2], r = new int[2];
+        tile.getLocationInWindow(t);
+        root.getLocationInWindow(r);
+        float w = tile.getWidth() * tile.getScaleX();
+        return new float[]{t[0] - r[0] + w / 2f - cat.getWidth() / 2f, t[1] - r[1] - cat.getHeight() + dp(3)};
+    }
+
+    private void pinCat() {
+        if (!catTarget.isAttachedToWindow()) return;   // loadApps() rebuilt the tiles; focus moves it on
+        float[] p = catSpot(catTarget);
+        cat.setTranslationX(p[0]);
+        cat.setTranslationY(p[1]);
+    }
+
+    /** Jumps in an arc from the tile it sits on to the newly focused one; the first focus just puts it there. */
+    private void moveCat(View tile) {
+        if (catJump != null) catJump.cancel();
+        boolean first = catTarget == null || cat.getVisibility() != View.VISIBLE;
+        catTarget = tile;
+        if (first) {
+            cat.setVisibility(View.VISIBLE);
+            pinCat();
+            return;
+        }
+        final float x0 = cat.getTranslationX(), y0 = cat.getTranslationY();
+        final float height = dp(32);
+        // As quick as the focus zoom (240 ms), so the cat keeps up when the D-pad is held or pressed fast.
+        catJump = ValueAnimator.ofFloat(0f, 1f).setDuration(200);
+        catJump.setInterpolator(new AccelerateDecelerateInterpolator());
+        catJump.addUpdateListener(a -> {
+            float f = (float) a.getAnimatedValue();
+            float[] end = catSpot(tile);   // the target zooms and scrolls while the cat is in the air
+            cat.setScaleX(end[0] < x0 ? -1f : 1f);
+            cat.setTranslationX(x0 + (end[0] - x0) * f);
+            cat.setTranslationY(y0 + (end[1] - y0) * f - height * 4f * f * (1f - f));
+            cat.setRotation((end[0] < x0 ? -1f : 1f) * 12f * (float) Math.sin(Math.PI * f));
+        });
+        catJump.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                cat.setRotation(0f);
+                catJump = null;
+            }
+        });
+        catJump.start();
     }
 
     private void restoreFocus() {
@@ -442,6 +539,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private void openInput(String inputId) {
         Uri uri = TvContract.buildChannelUriForPassthroughInput(inputId);
         open(new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel"));
+    }
+
+    /** Fire OS answers ACTION_SETTINGS with a stub that lands on Amazon's home; its real menu lives in its launcher. */
+    private Intent settingsIntent() {
+        Intent fire = new Intent().setClassName("com.amazon.tv.launcher", "com.amazon.tv.launcher.ui.MainSettingsActivity");
+        return getPackageManager().resolveActivity(fire, 0) != null ? fire : new Intent(Settings.ACTION_SETTINGS);
     }
 
     private void open(Intent i) {
