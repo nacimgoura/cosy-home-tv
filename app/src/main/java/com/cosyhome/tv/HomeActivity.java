@@ -47,7 +47,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private static final long MINUTE_MS = 60_000L;
     private static final int GRID_COLUMNS = 6;
     /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
-    private static final int SIDE_DP = 48, COL_GAP_DP = 16, ROW_GAP_DP = 30;
+    private static final int SIDE_DP = 72, COL_GAP_DP = 16, ROW_GAP_DP = 30, DIVIDER_GAP_DP = 12;
     /** Dock tiles rest at this opacity until focused, as in the mockup. */
     private static final float DOCK_REST_ALPHA = 0.62f;
     /** OLED care: the clock layer moves through these dp offsets, one step a minute. */
@@ -391,11 +391,20 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             dock.addView(t, lp);
         }
 
-        // The rest follow under the dock, the same gap away as one row from the next (it leaves the cat room to
-        // sit): the grid starts up into the dock's bottom margin, so the top of the next row peeks at the bottom.
+        // Dock, grid and the hairline between them share the side margins. The hairline sits a little under the
+        // dock, inside its bottom margin, and the grid follows a row gap later (room for the cat), so the top of
+        // the next row still peeks at the bottom of the screen.
+        int side = dp(SIDE_DP);
+        android.widget.FrameLayout.LayoutParams dlp = (android.widget.FrameLayout.LayoutParams) dock.getLayoutParams();
+        dlp.setMarginStart(side);
+        LinearLayout.LayoutParams vlp = (LinearLayout.LayoutParams) findViewById(R.id.divider).getLayoutParams();
+        vlp.setMarginStart(side);
+        vlp.setMarginEnd(side);
+        vlp.topMargin = -dlp.bottomMargin + dp(DIVIDER_GAP_DP);
+        LinearLayout.LayoutParams glp = (LinearLayout.LayoutParams) grid.getLayoutParams();
+        glp.setMarginStart(side);
+        glp.topMargin = 0;
         grid.setPadding(0, rowGap, 0, grid.getPaddingBottom());
-        ((LinearLayout.LayoutParams) grid.getLayoutParams()).topMargin =
-                -((android.widget.FrameLayout.LayoutParams) dock.getLayoutParams()).bottomMargin;
         for (int i = 0; i < rest.size(); i++) {
             Tile t = new Tile(this, rest.get(i), 1f);
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
