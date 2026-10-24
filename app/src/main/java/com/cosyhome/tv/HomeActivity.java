@@ -582,6 +582,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         addMenuItem(getString(R.string.menu_hide), () -> hideTile(g));
         addMenuItem(getString(R.string.menu_info), () -> open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + app.pkg))));
+        addMenuItem(getString(R.string.menu_uninstall), () -> uninstall(app.pkg));
         int hidden = hiddenByRemote().size();
         if (hidden > 0) addMenuItem(getString(R.string.menu_show_hidden, hidden), this::showHiddenTiles);
         // A dropdown: Up and Down walk it and stop at its ends, Left and Right go nowhere.
@@ -644,6 +645,17 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         catTarget = null;
         buildTiles();
         if (!tiles.isEmpty()) tileAt(Math.min(g, tiles.size() - 1)).requestFocus();
+    }
+
+    /** The system's own uninstall dialog: the package manager refuses system apps itself. */
+    private void uninstall(String pkg) {
+        Intent i = new Intent(Intent.ACTION_UNINSTALL_PACKAGE, Uri.parse("package:" + pkg));
+        i.putExtra(Intent.EXTRA_RETURN_RESULT, false);
+        try {
+            startActivity(i);
+        } catch (ActivityNotFoundException e) {
+            startActivity(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + pkg)));
+        }
     }
 
     private void showHiddenTiles() {

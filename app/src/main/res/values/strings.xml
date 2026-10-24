@@ -14,6 +14,7 @@
     <string name="menu_move">Déplacer</string>
     <string name="menu_hide">Masquer</string>
     <string name="menu_info">Infos de l\'app</string>
+    <string name="menu_uninstall">Désinstaller</string>
     <string name="menu_show_hidden">Réafficher les apps masquées (%1$d)</string>
     <string name="not_available">Non disponible sur cette TV</string>
 </resources>
