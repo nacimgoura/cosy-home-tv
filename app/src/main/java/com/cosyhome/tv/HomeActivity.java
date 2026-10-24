@@ -248,7 +248,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         if (showInputs) buildInputs();
         minuteTick.run();
         if (located) handler.postDelayed(weatherTick, Weather.stale(this) ? 0 : Weather.REFRESH_MS);
-        scene.setRunning(true);
+        scene.onHome();   // repaint the still if a memory trim released it
         restoreFocus();
     }
 
@@ -259,7 +259,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         resumed = false;
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(weatherTick);
-        scene.setRunning(false);
     }
 
     /**
@@ -282,6 +281,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         closeTileMenu(false);
         endMove();
         closeInputs();
+        scene.onHome();   // Home pressed while already home: repaint the still if a trim released it
         if (!focusLastLaunched()) {
             focusDock(0);
             page.smoothScrollTo(0, 0);

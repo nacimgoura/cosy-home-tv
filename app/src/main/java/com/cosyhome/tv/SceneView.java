@@ -117,14 +117,16 @@ public class SceneView extends View {
         rebuild();
     }
 
-    /** Frees the full-screen still while an app is in front; the next {@link #setPhase} redraws it. */
+    /** Frees the still and its blurred copy while an app is in front; the next {@link #onHome()} redraws it. */
     void release() {
         still = null;
+        blurred = null;
     }
 
-    /** A still image: paint it when Home comes back on screen, then leave the GPU alone. */
-    void setRunning(boolean run) {
-        if (run) invalidate();
+    /** Home is on screen again: repaint the still if a memory trim released it, else just show it. */
+    void onHome() {
+        if (still == null) rebuild();
+        else invalidate();
     }
 
     @Override
@@ -136,6 +138,7 @@ public class SceneView extends View {
     private void rebuild() {
         int w = getWidth(), h = getHeight();
         if (w == 0 || h == 0) return;
+        if (still != null) still.recycle();   // a phase change replaces the bitmap instead of piling up 8 MB
         // Full colour (about 8 MB at 1080p): RGB_565 bands visibly in the dark sky and the moon's glow.
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
