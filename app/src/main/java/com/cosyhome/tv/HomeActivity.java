@@ -47,8 +47,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private static final long MINUTE_MS = 60_000L;
     private static final String PREFS = "cosy", ORDER_KEY = "tile_order", HIDDEN_KEY = "hidden_by_remote",
             LAST_KEY = "last_launched";
-    /** The Fire TV Appstore, opened by the pill between Wi-Fi and Settings. */
-    private static final String STORE_PACKAGE = "com.amazon.venezia";
     /** Kara Settings: the settings entry that survives removing Amazon's launcher. */
     private static final String KARA_SETTINGS = "local.kara.settingsredirector";
     private static final int GRID_COLUMNS = 6;
@@ -810,18 +808,21 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         open(new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel"));
     }
 
-    /** The Fire TV Appstore: its leanback app grid, else whatever it advertises, else a short toast. */
+    /** The store on this platform: Fire TV's Appstore, else the Play Store on Android TV, else a toast. */
     private void openStore() {
-        Intent store = new Intent().setClassName(STORE_PACKAGE,
-                "com.amazon.venezia.grid.AppsGridLauncherActivity");
-        if (getPackageManager().resolveActivity(store, 0) == null) {
-            store = getPackageManager().getLeanbackLaunchIntentForPackage(STORE_PACKAGE);
-        }
+        Intent store = storeIntent("com.amazon.venezia", "com.amazon.venezia.grid.AppsGridLauncherActivity");
+        if (store == null) store = storeIntent("com.android.vending", "com.android.vending.AssetBrowserActivity");
         if (store == null) {
             Toast.makeText(this, R.string.store_missing, Toast.LENGTH_SHORT).show();
             return;
         }
         open(store);
+    }
+
+    /** One store screen by component, or null when that store is not on this TV. */
+    private Intent storeIntent(String pkg, String activity) {
+        Intent i = new Intent().setClassName(pkg, activity);
+        return getPackageManager().resolveActivity(i, 0) != null ? i : null;
     }
 
     /**
