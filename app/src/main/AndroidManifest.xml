@@ -6,6 +6,8 @@
 
     <!-- Weather for the clock (Open-Meteo, no account). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Fire OS drops sound_effects_enabled to 0 when audio goes to an external system; put it back on start. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
 
     <!-- Android 11+ package visibility: the apps shown as tiles, and the Philips screens the chips open. -->
     <queries>

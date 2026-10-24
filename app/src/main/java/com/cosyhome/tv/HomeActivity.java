@@ -6,8 +6,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.media.AudioAttributes;
-import android.media.SoundPool;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
@@ -60,9 +58,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private static final int[][] SHIFT_DP = {{0, 0}, {3, 2}, {5, -1}, {2, -4}, {-2, -3}, {-4, 1}, {-1, 4}};
 
     private SceneView scene;
-    /** Our own navigation click: Fire OS silences the framework's UI sounds on some TVs. */
-    private SoundPool clicks;
-    private int clickSound;
     private View homeLayer, sources;
     private RoomyScrollView page;
     private TextView clock, date, weather;
@@ -179,14 +174,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         });
         scene.setListener(this);
 
-        // A click of our own on the media stream: Fire OS mutes the framework's UI sounds in Home Cinema mode.
-        AudioAttributes tick = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build();
-        clicks = new SoundPool.Builder().setMaxStreams(1).setAudioAttributes(tick).build();
-        clickSound = clicks.load(this, R.raw.nav_click, 1);
-
         View wifi = findViewById(R.id.wifi), store = findViewById(R.id.store),
                 settings = findViewById(R.id.settings);
         sources.setOnClickListener(v -> openInputs());
@@ -252,10 +239,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     @Override
     protected void onDestroy() {
         unregisterReceiver(packageReceiver);
-        if (clicks != null) {
-            clicks.release();
-            clicks = null;
-        }
         super.onDestroy();
     }
 
@@ -263,6 +246,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        restoreUiSounds();
         // Rebuilding the tiles reloads every banner: only when an app was installed or removed meanwhile.
         if (appsDirty) {
             appsDirty = false;
@@ -536,9 +520,26 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         return isArrow(keyCode);
     }
 
-    /** A short click of our own: the framework's UI sounds are silenced on some TVs (Home Cinema mode). */
+    /** The system's navigation click: Android plays it only for focus moves it makes itself, and these are ours. */
     private void navSound(int keyCode) {
-        if (clicks != null && clickSound != 0) clicks.play(clickSound, 1f, 1f, 1, 0, 1f);
+        int dir = keyCode == KeyEvent.KEYCODE_DPAD_UP ? View.FOCUS_UP
+                : keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? View.FOCUS_DOWN
+                : keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? View.FOCUS_LEFT : View.FOCUS_RIGHT;
+        root.playSoundEffect(android.view.SoundEffectConstants.getContantForFocusDirection(dir));
+    }
+
+    /**
+     * Fire OS sets the UI sounds to 0 as soon as audio goes to an external system, and leaves them there after a
+     * power cut; the launcher puts them back when it runs, so the system's own clicks keep working.
+     */
+    private void restoreUiSounds() {
+        try {
+            if (Settings.System.getInt(getContentResolver(), Settings.System.SOUND_EFFECTS_ENABLED, 1) == 0) {
+                Settings.System.putInt(getContentResolver(), Settings.System.SOUND_EFFECTS_ENABLED, 1);
+            }
+        } catch (SecurityException ignored) {
+            // WRITE_SETTINGS was never granted: the system keeps its own value.
+        }
     }
 
     private static boolean isArrow(int keyCode) {
