@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 960x540dp canvas on a 1080p TV: the mockup's pixel values halved. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -54,6 +55,7 @@
                         android:layout_height="wrap_content"
                         android:fontFamily="@font/outfit"
                         android:fontVariationSettings="'wght' 200"
+                        tools:targetApi="28"
                         android:fontFeatureSettings="tnum"
                         android:includeFontPadding="false"
                         android:letterSpacing="-0.04"
@@ -66,6 +68,7 @@
                         android:layout_marginTop="10dp"
                         android:fontFamily="@font/outfit"
                         android:fontVariationSettings="'wght' 300"
+                        tools:targetApi="28"
                         android:textSize="24sp" />
 
                     <TextView
@@ -75,6 +78,7 @@
                         android:layout_marginTop="3dp"
                         android:fontFamily="@font/outfit"
                         android:fontVariationSettings="'wght' 400"
+                        tools:targetApi="28"
                         android:textSize="16sp" />
                 </LinearLayout>
 
