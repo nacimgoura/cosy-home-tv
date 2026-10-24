@@ -263,16 +263,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     }
 
     /**
-     * Any key keeps the scene's slow animation alive for another minute; when nobody touches the remote the
-     * animation parks and the launcher drops to 0 % CPU.
-     */
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getAction() == KeyEvent.ACTION_DOWN) scene.touch();
-        return super.dispatchKeyEvent(event);
-    }
-
-    /**
      * Keep the scene while an app is in front, so Home comes back without redrawing it (Amazon's home shows meanwhile
      * on Fire OS). Give its 8 MB back only when Android runs short of memory.
      */

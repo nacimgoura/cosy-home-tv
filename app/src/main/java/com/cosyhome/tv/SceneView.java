@@ -9,16 +9,15 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
-import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
 
 /**
  * The cosy valley behind the clock: sky, sun or moon, three hills and a cottage.
  *
- * Drawn on a 1920x1080 design canvas and scaled to the view. Everything that never moves is
- * painted once per phase into {@link #still}; each frame only adds the stars, clouds and chimney
- * smoke on top, at about 25 fps, so the TV's GPU is mostly drawing one bitmap.
+ * Drawn on a 1920x1080 design canvas and scaled to the view, once per phase (dawn, day, dusk, night)
+ * into {@link #still}. Nothing moves: the scene is a still image, so the GPU only ever blits one
+ * bitmap and the launcher costs no CPU while it sits on Home.
  */
 public class SceneView extends View {
 
@@ -30,10 +29,6 @@ public class SceneView extends View {
     }
 
     private static final float W = 1920f, H = 1080f;
-    /** 8 fps: the clouds take 70 s to drift and the smoke 7 s to rise, so this reads the same as 25 fps. */
-    private static final long FRAME_MS = 120;
-    /** Stop animating after a minute without a key; the next key resumes it where it stopped. */
-    private static final long IDLE_MS = 60_000;
 
     /** Sky stops, three hill colours, window colour, window glow strength, dark clock text. */
     private static final class Palette {
@@ -63,29 +58,13 @@ public class SceneView extends View {
     private static final Palette NIGHT = new Palette(0xFF04060E, 0xFF0B1230, 0xFF1A2550,
             0xFF161D36, 0xFF0E1326, 0xFF070A14, 0xFFFFB35C, 1f, false);
 
-    private static final float[][] STARS = {
-            {180, 90, 2}, {420, 180, 1.6f}, {690, 70, 2.2f}, {930, 150, 1.4f}, {1150, 60, 2},
-            {1320, 130, 1.5f}, {1720, 90, 2.2f}, {1830, 260, 1.4f}, {1080, 300, 1.4f}, {820, 380, 1.2f},
-            {1620, 400, 1.3f}, {560, 330, 1.2f}, {300, 420, 1.1f}, {1240, 240, 1.2f}, {80, 250, 1.5f}};
-    /** Cloud puffs as {cx, cy, rx, ry}. */
-    private static final float[][] CLOUDS = {
-            {420, 260, 130, 34}, {500, 240, 90, 40}, {1000, 380, 160, 30}, {1080, 362, 80, 34}, {1760, 430, 120, 26}};
-
     private Phase phase = Phase.NIGHT;
     private Palette pal = NIGHT;
     private Bitmap still;
     private Bitmap blurred;
     private Listener listener;
-    private boolean running;
-    private long start = SystemClock.uptimeMillis();
-    /** When the last key arrived: the animation runs for {@link #IDLE_MS} after it, then parks. */
-    private long lastKey = SystemClock.uptimeMillis();
-    /** Scene time (ms) where the animation stopped, or -1 while it runs; resuming adds it back to start. */
-    private long pausedAt = -1;
     /** For the still layers. Shaders draw with the paint's alpha, so it must never carry a frame's fade. */
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    /** For the per-frame stars, clouds and smoke, whose colours carry their own fades. */
-    private final Paint fx = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path far = new Path(), mid = new Path(), near = new Path();
 
     public SceneView(Context context, AttributeSet attrs) {
@@ -143,28 +122,9 @@ public class SceneView extends View {
         still = null;
     }
 
-    /** Animate only while Home is on screen, and only for a minute after the last key. */
+    /** A still image: paint it when Home comes back on screen, then leave the GPU alone. */
     void setRunning(boolean run) {
-        if (run && !running) {
-            lastKey = SystemClock.uptimeMillis();
-            if (pausedAt >= 0) {                       // resume the scene clock where it stopped
-                start = lastKey - pausedAt;
-                pausedAt = -1;
-            }
-        }
-        running = run;
         if (run) invalidate();
-    }
-
-    /** A key arrived: keep the scene moving for another minute, resuming it if it had parked. */
-    void touch() {
-        if (!running) return;
-        lastKey = SystemClock.uptimeMillis();
-        if (pausedAt >= 0) {
-            start = lastKey - pausedAt;
-            pausedAt = -1;
-            invalidate();
-        }
     }
 
     @Override
@@ -284,50 +244,6 @@ public class SceneView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (still == null) return;
-        canvas.drawBitmap(still, 0, 0, null);
-        float seconds = (SystemClock.uptimeMillis() - start) / 1000f;
-        canvas.save();
-        canvas.scale(getWidth() / W, getHeight() / H);
-        if (phase == Phase.NIGHT || phase == Phase.DUSK) drawStars(canvas, seconds, phase == Phase.NIGHT ? 1f : 0.35f);
-        if (phase == Phase.DAWN || phase == Phase.DAY) drawClouds(canvas, seconds);
-        if (phase != Phase.DAY) drawSmoke(canvas, seconds);
-        canvas.restore();
-        if (!running) return;
-        if (SystemClock.uptimeMillis() - lastKey < IDLE_MS) {
-            postInvalidateDelayed(FRAME_MS);
-        } else if (pausedAt < 0) {
-            pausedAt = SystemClock.uptimeMillis() - start;   // freeze the scene clock while parked
-        }
-    }
-
-    private void drawStars(Canvas c, float s, float strength) {
-        for (int i = 0; i < STARS.length; i++) {
-            float[] st = STARS[i];
-            // Every other star twinkles, each on its own slow period.
-            float twinkle = i % 2 == 0 ? 1f : 0.65f + 0.35f * (float) Math.sin(s * (0.9f + i * 0.13f) + i);
-            fx.setColor(Color.argb(Math.round(240 * strength * twinkle), 255, 255, 255));
-            c.drawCircle(st[0], st[1], st[2], fx);
-        }
-    }
-
-    private void drawClouds(Canvas c, float s) {
-        // Drift 230 px one way over 70 s, then back: the mockup's ease-in-out alternate.
-        float t = (float) (0.5 - 0.5 * Math.cos(Math.PI * s / 70.0));
-        float dx = -90 + 230 * t;
-        fx.setColor(Color.argb(phase == Phase.DAY ? 150 : 120, 255, 255, 255));
-        for (float[] cl : CLOUDS) {
-            c.drawOval(cl[0] - cl[2] + dx, cl[1] - cl[3], cl[0] + cl[2] + dx, cl[1] + cl[3], fx);
-        }
-    }
-
-    private void drawSmoke(Canvas c, float s) {
-        for (int i = 0; i < 3; i++) {
-            float t = ((s + i * 2.33f) % 7f) / 7f;              // 0..1 over a 7 s rise
-            float alpha = t < 0.2f ? t / 0.2f * 0.45f : 0.45f * (1 - (t - 0.2f) / 0.8f);
-            float r = 10 * (0.6f + 1.1f * t);
-            fx.setColor(Color.argb(Math.round(alpha * 255), 0xD8, 0xD2, 0xE2));
-            c.drawCircle(1595 + 34 * t, 680 - 130 * t, r, fx);
-        }
+        if (still != null) canvas.drawBitmap(still, 0, 0, null);
     }
 }
