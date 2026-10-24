@@ -49,6 +49,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             LAST_KEY = "last_launched";
     /** Aurora Store, opened by the pill between Wi-Fi and Settings. */
     private static final String STORE_PACKAGE = "com.aurora.store";
+    /** Kara Settings: the settings entry that survives removing Amazon's launcher. */
+    private static final String KARA_SETTINGS = "local.kara.settingsredirector";
     private static final int GRID_COLUMNS = 6;
     /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
     private static final int SIDE_DP = 92, COL_GAP_DP = 16, ROW_GAP_DP = 30;
@@ -819,18 +821,37 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         open(i);
     }
 
-    /** Wi-Fi settings; where the TV answers that with nothing usable (Fire OS), the Settings menu instead. */
+    /**
+     * Wi-Fi: Fire OS's own network screen by component (its generic intent answers a CTSDummy stub that
+     * lands on the launcher), then Kara Settings, then the plain intent.
+     */
     private Intent wifiIntent() {
+        Intent stock = new Intent().setClassName("com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.network.NetworkActivity");
+        if (getPackageManager().resolveActivity(stock, 0) != null) return stock;
+        Intent kara = karaIntent("local.kara.settingsredirector.MainActivity");
+        if (kara != null) return kara;
         Intent wifi = new Intent(Settings.ACTION_WIFI_SETTINGS);
         android.content.pm.ResolveInfo ri = getPackageManager().resolveActivity(wifi, 0);
         boolean usable = ri != null && ri.activityInfo != null && !ri.activityInfo.name.contains("CTSDummy");
         return usable ? wifi : settingsIntent();
     }
 
-    /** Fire OS answers ACTION_SETTINGS with a stub that lands on Amazon's home; its real menu lives in its launcher. */
+    /**
+     * Settings: Kara Settings when installed, so the pill keeps working once Amazon's launcher is gone; then the
+     * launcher's own menu (Fire OS answers ACTION_SETTINGS with a stub that lands on its home).
+     */
     private Intent settingsIntent() {
+        Intent kara = karaIntent("local.kara.settingsredirector.MainActivity");
+        if (kara != null) return kara;
         Intent fire = new Intent().setClassName("com.amazon.tv.launcher", "com.amazon.tv.launcher.ui.MainSettingsActivity");
         return getPackageManager().resolveActivity(fire, 0) != null ? fire : new Intent(Settings.ACTION_SETTINGS);
+    }
+
+    /** One of Kara Settings' screens, or null when the app is not there. */
+    private Intent karaIntent(String activity) {
+        Intent i = new Intent().setClassName(KARA_SETTINGS, activity);
+        return getPackageManager().resolveActivity(i, 0) != null ? i : null;
     }
 
     private void open(Intent i) {
