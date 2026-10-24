@@ -30,7 +30,10 @@ public class SceneView extends View {
     }
 
     private static final float W = 1920f, H = 1080f;
-    private static final long FRAME_MS = 40;
+    /** 8 fps: the clouds take 70 s to drift and the smoke 7 s to rise, so this reads the same as 25 fps. */
+    private static final long FRAME_MS = 120;
+    /** Stop animating after a minute without a key; the next key resumes it where it stopped. */
+    private static final long IDLE_MS = 60_000;
 
     /** Sky stops, three hill colours, window colour, window glow strength, dark clock text. */
     private static final class Palette {
@@ -74,7 +77,11 @@ public class SceneView extends View {
     private Bitmap blurred;
     private Listener listener;
     private boolean running;
-    private final long start = SystemClock.uptimeMillis();
+    private long start = SystemClock.uptimeMillis();
+    /** When the last key arrived: the animation runs for {@link #IDLE_MS} after it, then parks. */
+    private long lastKey = SystemClock.uptimeMillis();
+    /** Scene time (ms) where the animation stopped, or -1 while it runs; resuming adds it back to start. */
+    private long pausedAt = -1;
     /** For the still layers. Shaders draw with the paint's alpha, so it must never carry a frame's fade. */
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** For the per-frame stars, clouds and smoke, whose colours carry their own fades. */
@@ -136,10 +143,28 @@ public class SceneView extends View {
         still = null;
     }
 
-    /** Animate only while Home is on screen. */
+    /** Animate only while Home is on screen, and only for a minute after the last key. */
     void setRunning(boolean run) {
+        if (run && !running) {
+            lastKey = SystemClock.uptimeMillis();
+            if (pausedAt >= 0) {                       // resume the scene clock where it stopped
+                start = lastKey - pausedAt;
+                pausedAt = -1;
+            }
+        }
         running = run;
         if (run) invalidate();
+    }
+
+    /** A key arrived: keep the scene moving for another minute, resuming it if it had parked. */
+    void touch() {
+        if (!running) return;
+        lastKey = SystemClock.uptimeMillis();
+        if (pausedAt >= 0) {
+            start = lastKey - pausedAt;
+            pausedAt = -1;
+            invalidate();
+        }
     }
 
     @Override
@@ -268,7 +293,12 @@ public class SceneView extends View {
         if (phase == Phase.DAWN || phase == Phase.DAY) drawClouds(canvas, seconds);
         if (phase != Phase.DAY) drawSmoke(canvas, seconds);
         canvas.restore();
-        if (running) postInvalidateDelayed(FRAME_MS);
+        if (!running) return;
+        if (SystemClock.uptimeMillis() - lastKey < IDLE_MS) {
+            postInvalidateDelayed(FRAME_MS);
+        } else if (pausedAt < 0) {
+            pausedAt = SystemClock.uptimeMillis() - start;   // freeze the scene clock while parked
+        }
     }
 
     private void drawStars(Canvas c, float s, float strength) {
