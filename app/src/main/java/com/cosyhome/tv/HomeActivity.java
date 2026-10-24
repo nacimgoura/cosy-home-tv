@@ -202,6 +202,15 @@ public class HomeActivity extends Activity implements SceneView.Listener {
                     focusDock(lastDock);
                     return true;
                 }
+                // Left and right move between the pills: play the click, then let the focus search do the move.
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v != firstPill()) {
+                    navSound(keyCode);
+                    return false;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v != settings) {
+                    navSound(keyCode);
+                    return false;
+                }
                 return keyCode == KeyEvent.KEYCODE_DPAD_UP
                         || (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v == firstPill())
                         || (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v == settings);
