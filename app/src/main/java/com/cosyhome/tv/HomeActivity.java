@@ -786,6 +786,9 @@ public class HomeActivity extends Activity implements SceneView.Listener {
      */
     private void buildSettingsMenu() {
         settingsItems.removeAllViews();
+        // The launcher's own menu gathers every section, Display & Audio included: it is the settings bridge.
+        addSettingsChip(R.string.settings_all, "com.amazon.tv.launcher",
+                "com.amazon.tv.launcher.ui.MainSettingsActivity");
         addSettingsChip(R.string.settings_applications, "com.amazon.tv.settings.v2",
                 "com.amazon.tv.settings.v2.tv.applications.ApplicationsActivity");
         addSettingsChip(R.string.settings_bluetooth, "com.amazon.tv.settings.v2",

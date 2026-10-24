@@ -7,6 +7,7 @@
     <string name="store">Magasin</string>
     <string name="store_missing">Magasin non installé</string>
     <string name="settings">Paramètres</string>
+    <string name="settings_all">Tous les réglages</string>
     <string name="settings_applications">Applications</string>
     <string name="settings_bluetooth">Manettes et Bluetooth</string>
     <string name="settings_network">Réseau</string>
