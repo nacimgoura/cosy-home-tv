@@ -55,7 +55,9 @@ final class Apps {
             if (pkg.equals(ctx.getPackageName()) || hidden.contains(pkg) || !seen.add(pkg)) continue;
             ComponentName component = new ComponentName(pkg, ri.activityInfo.name);
             String label = String.valueOf(ri.loadLabel(pm)).trim();
-            apps.add(new App(label, component, loadBanner(ctx, pm, ri), ri.loadIcon(pm)));
+            Drawable banner = loadBanner(ctx, pm, ri);
+            // The icon only ever shows when there is no banner; decoding one per app costs time at start-up.
+            apps.add(new App(label, component, banner, banner == null ? ri.loadIcon(pm) : null));
         }
         Collections.sort(apps, (a, b) -> {
             int ra = rank(a.pkg, dock, pinned), rb = rank(b.pkg, dock, pinned);

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -7,7 +8,8 @@
     <!-- Weather for the clock (Open-Meteo, no account). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Fire OS drops sound_effects_enabled to 0 when audio goes to an external system; put it back on start. -->
-    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- Android 11+ package visibility: the apps shown as tiles, and the Philips screens the chips open. -->
     <queries>

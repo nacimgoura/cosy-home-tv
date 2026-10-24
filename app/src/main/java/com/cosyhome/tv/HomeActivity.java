@@ -48,8 +48,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private static final long MINUTE_MS = 60_000L;
     private static final String PREFS = "cosy", ORDER_KEY = "tile_order", HIDDEN_KEY = "hidden_by_remote",
             LAST_KEY = "last_launched";
-    /** Kara Settings: the settings entry that survives removing Amazon's launcher. */
-    private static final String KARA_SETTINGS = "local.kara.settingsredirector";
     private static final int GRID_COLUMNS = 6;
     /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
     private static final int SIDE_DP = 92, COL_GAP_DP = 16, ROW_GAP_DP = 30;
@@ -863,14 +861,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     /**
      * Wi-Fi: Fire OS's own network screen by component (its generic intent answers a CTSDummy stub that
-     * lands on the launcher), then Kara Settings, then the plain intent.
+     * lands on the launcher), then the plain intent when it is real.
      */
     private Intent wifiIntent() {
         Intent stock = new Intent().setClassName("com.amazon.tv.settings.v2",
                 "com.amazon.tv.settings.v2.tv.network.NetworkActivity");
         if (getPackageManager().resolveActivity(stock, 0) != null) return stock;
-        Intent kara = karaIntent("local.kara.settingsredirector.MainActivity");
-        if (kara != null) return kara;
         Intent wifi = new Intent(Settings.ACTION_WIFI_SETTINGS);
         android.content.pm.ResolveInfo ri = getPackageManager().resolveActivity(wifi, 0);
         boolean usable = ri != null && ri.activityInfo != null && !ri.activityInfo.name.contains("CTSDummy");
@@ -879,7 +875,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     /**
      * Settings: the launcher's own menu when it is installed (it is the settings bridge and holds the permission
-     * for Display & Audio), then Fire OS's device screen, then Kara Settings, then the platform intent.
+     * for Display & Audio), then Fire OS's device screen, then the platform intent.
      */
     private Intent settingsIntent() {
         Intent all = new Intent().setClassName("com.amazon.tv.launcher",
@@ -887,15 +883,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         if (getPackageManager().resolveActivity(all, 0) != null) return all;
         Intent stock = new Intent().setClassName("com.amazon.tv.settings.v2",
                 "com.amazon.tv.settings.v2.tv.device.DeviceActivity");
-        if (getPackageManager().resolveActivity(stock, 0) != null) return stock;
-        Intent kara = karaIntent("local.kara.settingsredirector.MainActivity");
-        return kara != null ? kara : new Intent(Settings.ACTION_SETTINGS);
-    }
-
-    /** One of Kara Settings' screens, or null when the app is not there. */
-    private Intent karaIntent(String activity) {
-        Intent i = new Intent().setClassName(KARA_SETTINGS, activity);
-        return getPackageManager().resolveActivity(i, 0) != null ? i : null;
+        return getPackageManager().resolveActivity(stock, 0) != null ? stock : new Intent(Settings.ACTION_SETTINGS);
     }
 
     private void open(Intent i) {
