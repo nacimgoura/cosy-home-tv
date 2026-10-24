@@ -841,10 +841,13 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     }
 
     /**
-     * Settings: Kara Settings when installed, so the pill keeps working once Amazon's launcher is gone; else the
-     * platform's settings (Fire OS answers ACTION_SETTINGS with a stub that lands on its home).
+     * Settings: Fire OS's own device screen by component (its generic intents answer CTSDummy stubs), then Kara
+     * Settings, then the platform intent. Kara's first entry targets Amazon's launcher, which is gone.
      */
     private Intent settingsIntent() {
+        Intent stock = new Intent().setClassName("com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.device.DeviceActivity");
+        if (getPackageManager().resolveActivity(stock, 0) != null) return stock;
         Intent kara = karaIntent("local.kara.settingsredirector.MainActivity");
         return kara != null ? kara : new Intent(Settings.ACTION_SETTINGS);
     }
