@@ -45,7 +45,8 @@ import java.util.Set;
 public class HomeActivity extends Activity implements SceneView.Listener {
 
     private static final long MINUTE_MS = 60_000L;
-    private static final String PREFS = "cosy", ORDER_KEY = "tile_order", HIDDEN_KEY = "hidden_by_remote";
+    private static final String PREFS = "cosy", ORDER_KEY = "tile_order", HIDDEN_KEY = "hidden_by_remote",
+            LAST_KEY = "last_launched";
     private static final int GRID_COLUMNS = 6;
     /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
     private static final int SIDE_DP = 92, COL_GAP_DP = 16, ROW_GAP_DP = 30;
@@ -84,6 +85,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private boolean appsDirty = true;   // the first resume builds the tiles
     /** Survives the activity being recreated while an app is open; resets only with the process. */
     private static int lastDock = 0;
+    /** Package of the last app opened from a tile: Home comes back with the cat on it. Kept in prefs too. */
+    private String lastLaunched = "";
     /** Preview a phase from adb: `am start -n com.cosyhome.tv/.HomeActivity --es phase day` ("auto" clears it). */
     private static SceneView.Phase forcedPhase;
     private int shiftStep;
@@ -131,6 +134,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         dockApps = list(R.string.dock);
         pinnedApps = list(R.string.pinned);
         hiddenApps = new HashSet<>(list(R.string.hidden));
+        lastLaunched = getSharedPreferences(PREFS, MODE_PRIVATE).getString(LAST_KEY, "");
         liveTvPkg = getString(R.string.live_tv_package);
         usbPkg = getString(R.string.usb_package);
         place = getString(R.string.location_name);
@@ -262,7 +266,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         if (level >= TRIM_MEMORY_MODERATE) scene.release();
     }
 
-    /** Home pressed while already home: back to the clock with the first dock app focused. */
+    /** Home pressed while already home: back to the app last opened, or the first dock app. */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -272,8 +276,10 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         closeTileMenu(false);
         endMove();
         closeInputs();
-        focusDock(0);
-        page.smoothScrollTo(0, 0);
+        if (!focusLastLaunched()) {
+            focusDock(0);
+            page.smoothScrollTo(0, 0);
+        }
     }
 
     @Override
@@ -369,9 +375,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         Set<String> hide = new HashSet<>(hiddenApps);
         hide.addAll(hiddenByRemote());
         List<Apps.App> loaded = Apps.load(this, dockApps, pinnedApps, hide);
-        int docked = 0;
-        for (Apps.App a : loaded) if (dockApps.contains(a.pkg)) docked++;
-        dockCount = Math.min(docked, GRID_COLUMNS);
+        // Six tiles on the first row: the dock, then the next apps in order, so the row lines up with the grid.
+        dockCount = Math.min(loaded.size(), GRID_COLUMNS);
         // A saved order wins; apps it does not know (new installs) keep the default order after the known ones.
         List<String> saved = list(getSharedPreferences(PREFS, MODE_PRIVATE).getString(ORDER_KEY, ""));
         List<Apps.App> sorted = new ArrayList<>(loaded);
@@ -419,6 +424,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
                 moveCat(tile);
             });
             t.setOnTileHeld(() -> showTileMenu(index));
+            t.setOnLaunch(() -> rememberLaunched(t.app.pkg));
             t.setOnKeyListener((v, keyCode, e) -> e.getAction() == KeyEvent.ACTION_DOWN && onTileKey(index, keyCode, e));
             if (inDock) {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, tileH);
@@ -595,7 +601,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         hidden.add(tiles.get(g).pkg);
         saveHiddenByRemote(hidden);
         tiles.remove(g);
-        if (g < dockCount) dockCount--;
+        dockCount = Math.min(tiles.size(), GRID_COLUMNS);
         saveOrder();
         catTarget = null;
         buildTiles();
@@ -695,7 +701,27 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private void restoreFocus() {
         if (inputsOpen) return;
         View f = getCurrentFocus();
-        if (f == null || !f.isAttachedToWindow()) focusDock(lastDock);   // after a rebuild; else keep the place
+        if (f == null || !f.isAttachedToWindow()) {   // after a rebuild; else keep the place
+            if (!focusLastLaunched()) focusDock(lastDock);
+        }
+    }
+
+    /** Remembered so Home, and the app coming back to the front, put the cat back where you left it. */
+    private void rememberLaunched(String pkg) {
+        lastLaunched = pkg;
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(LAST_KEY, pkg).apply();
+    }
+
+    /** Focuses the tile of the last app opened; false when that app is no longer on the page. */
+    private boolean focusLastLaunched() {
+        if (lastLaunched.isEmpty()) return false;
+        for (int g = 0; g < tiles.size(); g++) {
+            if (!tiles.get(g).pkg.equals(lastLaunched)) continue;
+            if (g < dockCount) page.smoothScrollTo(0, 0);   // the dock lives on the clock screen
+            tileAt(g).requestFocus();
+            return true;
+        }
+        return false;
     }
 
     // ---- the Sources dropdown ---------------------------------------------------------------------

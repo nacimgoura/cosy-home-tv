@@ -29,6 +29,7 @@ final class Tile extends FrameLayout {
     private final float restAlpha;
     private final float lift;
     private Consumer<Tile> onFocus;
+    private Runnable onLaunch;
 
     Tile(Context ctx, Apps.App app, float restAlpha) {
         super(ctx);
@@ -95,6 +96,11 @@ final class Tile extends FrameLayout {
         onFocus = listener;
     }
 
+    /** Told when this tile really opened its app, so Home can remember it and put the cat back there. */
+    void setOnLaunch(Runnable action) {
+        onLaunch = action;
+    }
+
     /** Holding OK does this instead of opening the app's settings page (Cosy Home: pick the tile up to move it). */
     void setOnTileHeld(Runnable action) {
         setOnLongClickListener(v -> {
@@ -116,7 +122,9 @@ final class Tile extends FrameLayout {
                 .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                 .setComponent(app.component)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-        if (!open(i)) {
+        if (open(i)) {
+            if (onLaunch != null) onLaunch.run();
+        } else {
             Toast.makeText(getContext(), getContext().getString(R.string.cant_open, app.label), Toast.LENGTH_SHORT).show();
         }
     }
