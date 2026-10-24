@@ -19,6 +19,8 @@
         <intent>
             <action android:name="android.settings.SETTINGS" />
         </intent>
+        <!-- The Store pill opens Aurora Store; package visibility hides it from getLaunchIntentForPackage. -->
+        <package android:name="com.aurora.store" />
     </queries>
 
     <application

@@ -47,6 +47,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private static final long MINUTE_MS = 60_000L;
     private static final String PREFS = "cosy", ORDER_KEY = "tile_order", HIDDEN_KEY = "hidden_by_remote",
             LAST_KEY = "last_launched";
+    /** Aurora Store, opened by the pill between Wi-Fi and Settings. */
+    private static final String STORE_PACKAGE = "com.aurora.store";
     private static final int GRID_COLUMNS = 6;
     /** Tiles fill the width between these margins, 16:9, the same size in the dock and the grid. */
     private static final int SIDE_DP = 92, COL_GAP_DP = 16, ROW_GAP_DP = 30;
@@ -172,12 +174,14 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         });
         scene.setListener(this);
 
-        View wifi = findViewById(R.id.wifi), settings = findViewById(R.id.settings);
+        View wifi = findViewById(R.id.wifi), store = findViewById(R.id.store),
+                settings = findViewById(R.id.settings);
         sources.setOnClickListener(v -> openInputs());
         wifi.setOnClickListener(v -> open(wifiIntent()));
+        store.setOnClickListener(v -> openStore());
         settings.setOnClickListener(v -> open(settingsIntent()));
         // The pills are the top of the screen: Up goes nowhere, and the row's ends do not fall through.
-        for (View pill : new View[]{sources, wifi, settings}) {
+        for (View pill : new View[]{sources, wifi, store, settings}) {
             pill.setOnKeyListener((v, keyCode, e) -> {
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
@@ -802,6 +806,17 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private void openInput(String inputId) {
         Uri uri = TvContract.buildChannelUriForPassthroughInput(inputId);
         open(new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel"));
+    }
+
+    /** Aurora Store, the app store here: its leanback entry, else its plain one, else a short toast. */
+    private void openStore() {
+        Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(STORE_PACKAGE);
+        if (i == null) i = getPackageManager().getLaunchIntentForPackage(STORE_PACKAGE);
+        if (i == null) {
+            Toast.makeText(this, R.string.store_missing, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        open(i);
     }
 
     /** Wi-Fi settings; where the TV answers that with nothing usable (Fire OS), the Settings menu instead. */
