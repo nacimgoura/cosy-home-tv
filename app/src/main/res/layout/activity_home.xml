@@ -59,7 +59,7 @@
                         android:fontFeatureSettings="tnum"
                         android:includeFontPadding="false"
                         android:letterSpacing="-0.04"
-                        android:textSize="128sp" />
+                        android:textSize="112sp" />
 
                     <TextView
                         android:id="@+id/date"
