@@ -19,8 +19,8 @@
         <intent>
             <action android:name="android.settings.SETTINGS" />
         </intent>
-        <!-- The Store pill opens Aurora Store; package visibility hides it from getLaunchIntentForPackage. -->
-        <package android:name="com.aurora.store" />
+        <!-- The Store pill opens the Fire TV Appstore; package visibility hides it from resolveActivity. -->
+        <package android:name="com.amazon.venezia" />
         <!-- The Wi-Fi and Settings pills prefer Kara Settings once Amazon's launcher is gone. -->
         <package android:name="local.kara.settingsredirector" />
         <!-- Fire OS's own settings screens: the Wi-Fi pill opens the network one directly. -->

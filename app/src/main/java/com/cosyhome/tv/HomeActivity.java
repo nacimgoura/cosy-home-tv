@@ -47,8 +47,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private static final long MINUTE_MS = 60_000L;
     private static final String PREFS = "cosy", ORDER_KEY = "tile_order", HIDDEN_KEY = "hidden_by_remote",
             LAST_KEY = "last_launched";
-    /** Aurora Store, opened by the pill between Wi-Fi and Settings. */
-    private static final String STORE_PACKAGE = "com.aurora.store";
+    /** The Fire TV Appstore, opened by the pill between Wi-Fi and Settings. */
+    private static final String STORE_PACKAGE = "com.amazon.venezia";
     /** Kara Settings: the settings entry that survives removing Amazon's launcher. */
     private static final String KARA_SETTINGS = "local.kara.settingsredirector";
     private static final int GRID_COLUMNS = 6;
@@ -810,15 +810,18 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         open(new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel"));
     }
 
-    /** Aurora Store, the app store here: its leanback entry, else its plain one, else a short toast. */
+    /** The Fire TV Appstore: its leanback app grid, else whatever it advertises, else a short toast. */
     private void openStore() {
-        Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(STORE_PACKAGE);
-        if (i == null) i = getPackageManager().getLaunchIntentForPackage(STORE_PACKAGE);
-        if (i == null) {
+        Intent store = new Intent().setClassName(STORE_PACKAGE,
+                "com.amazon.venezia.grid.AppsGridLauncherActivity");
+        if (getPackageManager().resolveActivity(store, 0) == null) {
+            store = getPackageManager().getLeanbackLaunchIntentForPackage(STORE_PACKAGE);
+        }
+        if (store == null) {
             Toast.makeText(this, R.string.store_missing, Toast.LENGTH_SHORT).show();
             return;
         }
-        open(i);
+        open(store);
     }
 
     /**
