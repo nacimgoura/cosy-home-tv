@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.ContentObserver;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
@@ -180,6 +181,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         wifi.setOnClickListener(v -> open(wifiIntent()));
         store.setOnClickListener(v -> openStore());
         settings.setOnClickListener(v -> open(settingsIntent()));
+        getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SOUND_EFFECTS_ENABLED), false, uiSounds);
         // The pills are the top of the screen: Up goes nowhere, and the row's ends do not fall through.
         for (View pill : new View[]{sources, wifi, store, settings}) {
             pill.setOnKeyListener((v, keyCode, e) -> {
@@ -239,6 +242,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     @Override
     protected void onDestroy() {
         unregisterReceiver(packageReceiver);
+        getContentResolver().unregisterContentObserver(uiSounds);
         super.onDestroy();
     }
 
@@ -541,6 +545,14 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             // WRITE_SETTINGS was never granted: the system keeps its own value.
         }
     }
+
+    /** Fire OS drops the UI sounds whenever it likes: watch the key and put it back straight away. */
+    private final ContentObserver uiSounds = new ContentObserver(new Handler(Looper.getMainLooper())) {
+        @Override
+        public void onChange(boolean selfChange) {
+            restoreUiSounds();
+        }
+    };
 
     private static boolean isArrow(int keyCode) {
         return keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
