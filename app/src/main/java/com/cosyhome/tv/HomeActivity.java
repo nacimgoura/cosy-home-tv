@@ -841,14 +841,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     }
 
     /**
-     * Settings: Kara Settings when installed, so the pill keeps working once Amazon's launcher is gone; then the
-     * launcher's own menu (Fire OS answers ACTION_SETTINGS with a stub that lands on its home).
+     * Settings: Kara Settings when installed, so the pill keeps working once Amazon's launcher is gone; else the
+     * platform's settings (Fire OS answers ACTION_SETTINGS with a stub that lands on its home).
      */
     private Intent settingsIntent() {
         Intent kara = karaIntent("local.kara.settingsredirector.MainActivity");
-        if (kara != null) return kara;
-        Intent fire = new Intent().setClassName("com.amazon.tv.launcher", "com.amazon.tv.launcher.ui.MainSettingsActivity");
-        return getPackageManager().resolveActivity(fire, 0) != null ? fire : new Intent(Settings.ACTION_SETTINGS);
+        return kara != null ? kara : new Intent(Settings.ACTION_SETTINGS);
     }
 
     /** One of Kara Settings' screens, or null when the app is not there. */
