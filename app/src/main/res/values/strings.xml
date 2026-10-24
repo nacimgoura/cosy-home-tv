@@ -7,11 +7,6 @@
     <string name="store">Magasin</string>
     <string name="store_missing">Magasin non installé</string>
     <string name="settings">Paramètres</string>
-    <string name="settings_all">Tous les réglages</string>
-    <string name="settings_applications">Applications</string>
-    <string name="settings_bluetooth">Manettes et Bluetooth</string>
-    <string name="settings_network">Réseau</string>
-    <string name="settings_device">Appareil et à propos</string>
     <string name="live_tv">TV en direct</string>
     <string name="usb">USB</string>
     <string name="cant_open">Impossible d\'ouvrir %1$s</string>
