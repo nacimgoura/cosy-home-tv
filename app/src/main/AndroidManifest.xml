@@ -10,6 +10,8 @@
     <!-- Fire OS drops sound_effects_enabled to 0 when audio goes to an external system; put it back on start. -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
+    <!-- The tile menu's Uninstall entry opens the system dialog; the installer checks this permission. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <!-- Android 11+ package visibility: the apps shown as tiles, and the Philips screens the chips open. -->
     <queries>
