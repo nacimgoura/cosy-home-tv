@@ -538,7 +538,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     /** A short click of our own: the framework's UI sounds are silenced on some TVs (Home Cinema mode). */
     private void navSound(int keyCode) {
-        if (clicks != null && clickSound != 0) clicks.play(clickSound, 0.7f, 0.7f, 1, 0, 1f);
+        if (clicks != null && clickSound != 0) clicks.play(clickSound, 1f, 1f, 1, 0, 1f);
     }
 
     private static boolean isArrow(int keyCode) {
