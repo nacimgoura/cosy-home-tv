@@ -63,8 +63,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private TextView clock, date, weather;
     private LinearLayout dock, inputs;
     private GridLayout grid;
-    private GlassPanel inputsPanel, tileMenu;
-    private LinearLayout tileMenuItems;
+    private GlassPanel inputsPanel, tileMenu, settingsPanel;
+    private LinearLayout tileMenuItems, settingsItems;
     private View root, catTarget;
     private ImageView cat;
     private ValueAnimator catJump;
@@ -77,6 +77,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private float density;
 
     private boolean inputsOpen;
+    private boolean settingsOpen;
     /** Every tile in order: the first dockCount are the dock, the rest the grid under it. */
     private List<Apps.App> tiles = new ArrayList<>();
     private int dockCount;
@@ -160,6 +161,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         inputs = findViewById(R.id.inputs);
         grid = findViewById(R.id.appsGrid);
         inputsPanel = findViewById(R.id.inputsPanel);
+        settingsPanel = findViewById(R.id.settingsPanel);
+        settingsItems = findViewById(R.id.settingsItems);
         tileMenu = findViewById(R.id.tileMenu);
         tileMenuItems = findViewById(R.id.tileMenuItems);
         sources = findViewById(R.id.sources);
@@ -179,7 +182,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         sources.setOnClickListener(v -> openInputs());
         wifi.setOnClickListener(v -> open(wifiIntent()));
         store.setOnClickListener(v -> openStore());
-        settings.setOnClickListener(v -> open(settingsIntent()));
+        settings.setOnClickListener(v -> openSettingsMenu());
         // The pills are the top of the screen: Up goes nowhere, and the row's ends do not fall through.
         for (View pill : new View[]{sources, wifi, store, settings}) {
             pill.setOnKeyListener((v, keyCode, e) -> {
@@ -295,6 +298,9 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         } else if (inputsOpen) {
             closeInputs();
             sources.requestFocus();
+        } else if (settingsOpen) {
+            closeSettingsMenu();
+            findViewById(R.id.settings).requestFocus();
         } else if (dock.getChildCount() > 0 && !dock.hasFocus()) {
             focusDock(lastDock);   // from the grid or the pills, back to the dock and the clock
         }
@@ -746,6 +752,74 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         if (!inputsOpen) return;
         inputsOpen = false;
         inputsPanel.setVisibility(View.GONE);
+    }
+
+    // ---- the Settings dropdown --------------------------------------------------------------------
+
+    private void openSettingsMenu() {
+        buildSettingsMenu();
+        if (settingsItems.getChildCount() == 0) {   // no Fire OS settings screens here (Android TV): plain intent
+            open(settingsIntent());
+            return;
+        }
+        closeInputs();
+        closeTileMenu(false);
+        settingsOpen = true;
+        settingsPanel.setAlpha(0f);
+        settingsPanel.setVisibility(View.VISIBLE);
+        settingsPanel.animate().alpha(1f).setDuration(160).start();
+        settingsItems.getChildAt(0).requestFocus();
+    }
+
+    private void closeSettingsMenu() {
+        if (!settingsOpen) return;
+        settingsOpen = false;
+        settingsPanel.setVisibility(View.GONE);
+    }
+
+    /**
+     * The Fire OS screens Amazon's launcher used to gather in one menu. Its own "Display & Sounds" activity
+    /**
+     * The Fire OS screens still reachable without Amazon's launcher. Its "Display & Sounds" activity needs
+     * the signature permission LAUNCHER_SETTINGS, which only the launcher holds, so it is not listed here:
+     * with the launcher installed it is the settings bridge, and its own menu carries that section.
+     */
+    private void buildSettingsMenu() {
+        settingsItems.removeAllViews();
+        addSettingsChip(R.string.settings_applications, "com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.applications.ApplicationsActivity");
+        addSettingsChip(R.string.settings_bluetooth, "com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.controllers_bluetooth_devices.ControllersAndBluetoothActivity");
+        addSettingsChip(R.string.settings_network, "com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.network.NetworkActivity");
+        addSettingsChip(R.string.settings_device, "com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.device.DeviceActivity");
+
+        // A dropdown: Up and Down walk the list and stop at its ends, Left and Right go nowhere.
+        int n = settingsItems.getChildCount();
+        for (int i = 0; i < n; i++) {
+            final boolean top = i == 0, bottom = i == n - 1;
+            settingsItems.getChildAt(i).setOnKeyListener((v, keyCode, e) -> e.getAction() == KeyEvent.ACTION_DOWN
+                    && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || (keyCode == KeyEvent.KEYCODE_DPAD_UP && top) || (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && bottom)));
+        }
+    }
+
+    private void addSettingsChip(int label, String pkg, String activity) {
+        Intent i = new Intent().setClassName(pkg, activity);
+        if (getPackageManager().resolveActivity(i, 0) == null) return;
+        TextView chip = new TextView(this, null, 0, R.style.Chip);
+        chip.setText(label);
+        chip.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START);
+        chip.setTextSize(14f);
+        chip.setOnClickListener(v -> {
+            closeSettingsMenu();
+            open(i);
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
+        if (settingsItems.getChildCount() > 0) lp.topMargin = dp(6);
+        settingsItems.addView(chip, lp);
     }
 
     // ---- inputs -----------------------------------------------------------------------------------

@@ -187,6 +187,25 @@
             android:orientation="vertical" />
     </com.cosyhome.tv.GlassPanel>
 
+    <!-- Settings dropdown under the Settings pill: the Fire OS screens the Amazon launcher used to gather. -->
+    <com.cosyhome.tv.GlassPanel
+        android:id="@+id/settingsPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="88dp"
+        android:layout_marginEnd="92dp"
+        android:padding="10dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/settingsItems"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="260dp"
+            android:orientation="vertical" />
+    </com.cosyhome.tv.GlassPanel>
+
     <!-- The black cat sits on the focused tile and jumps to the next one (HomeActivity.moveCat). -->
     <ImageView
         android:id="@+id/cat"
