@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
@@ -856,8 +857,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
     /** The store on this platform: Fire TV's Appstore, else the Play Store on Android TV, else a toast. */
     private void openStore() {
+        PackageManager pm = getPackageManager();
         Intent store = storeIntent("com.amazon.venezia", "com.amazon.venezia.grid.AppsGridLauncherActivity");
-        if (store == null) store = storeIntent("com.android.vending", "com.android.vending.AssetBrowserActivity");
+        // Android TV: the Play Store's leanback entry (TvMainActivity); the component changes between versions.
+        if (store == null) store = pm.getLeanbackLaunchIntentForPackage("com.android.vending");
+        if (store == null) store = storeIntent("com.android.vending", "com.google.android.finsky.tvmainactivity.TvMainActivity");
+        if (store == null) store = pm.getLeanbackLaunchIntentForPackage("com.amazon.venezia");
         if (store == null) {
             Toast.makeText(this, R.string.store_missing, Toast.LENGTH_SHORT).show();
             return;
