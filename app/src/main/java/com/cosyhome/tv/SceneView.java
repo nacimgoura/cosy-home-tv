@@ -30,8 +30,7 @@ public class SceneView extends View {
     }
 
     private static final float W = 1920f, H = 1080f;
-    /** 15 fps: the smoke and the clouds move smoothly enough, at half the cost of 25 fps. */
-    private static final long FRAME_MS = 66;
+    private static final long FRAME_MS = 40;
 
     /** Sky stops, three hill colours, window colour, window glow strength, dark clock text. */
     private static final class Palette {
