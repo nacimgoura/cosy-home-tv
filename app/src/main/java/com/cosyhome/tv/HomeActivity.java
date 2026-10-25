@@ -391,7 +391,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private void loadApps() {
         Set<String> hide = new HashSet<>(hiddenApps);
         hide.addAll(hiddenByRemote());
-        List<Apps.App> loaded = Apps.load(this, dockApps, pinnedApps, hide);
+        // The dock and the row below it are on screen at start: decode those banners, the rest on first draw.
+        List<Apps.App> loaded = Apps.load(this, dockApps, pinnedApps, hide, dockApps.size() + GRID_COLUMNS);
         // Six tiles on the first row: the dock, then the next apps in order, so the row lines up with the grid.
         dockCount = Math.min(loaded.size(), GRID_COLUMNS);
         // A saved order wins; apps it does not know (new installs) keep the default order after the known ones.
