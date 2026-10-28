@@ -457,6 +457,22 @@ public class HomeActivity extends Activity implements SceneView.Listener {
                 grid.addView(t, lp);
             }
         }
+
+        // The deferred banners are decoded once the tiles are up, off the main thread: the grid opens
+        // without decoding on its first frame, and the tiles are ready before anyone scrolls to them.
+        grid.post(() -> {
+            List<Apps.LazyBanner> pending = new ArrayList<>();
+            for (Apps.App a : tiles) {
+                if (a.banner instanceof Apps.LazyBanner) pending.add((Apps.LazyBanner) a.banner);
+            }
+            if (pending.isEmpty()) return;
+            Thread t = new Thread(() -> {
+                for (Apps.LazyBanner b : pending) b.resolve();
+                grid.postInvalidate();
+            }, "cosy-banners");
+            t.setPriority(Thread.MIN_PRIORITY);
+            t.start();
+        });
     }
 
     private static final int TO_PILLS = -2, NOWHERE = -1;
