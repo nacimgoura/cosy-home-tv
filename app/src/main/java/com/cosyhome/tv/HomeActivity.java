@@ -815,11 +815,24 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     // ---- inputs -----------------------------------------------------------------------------------
 
     /** Live TV, the HDMI ports in order, and USB media. Rebuilt on every resume. */
+    /** What the input chips were last built from, so a resume with the same inputs keeps them. */
+    private List<String> inputsKey = Collections.emptyList();
+
+    /**
+     * Live TV, the HDMI ports in order, and USB media. Checked on every resume and rebuilt only when
+     * they change: each chip costs about 4 ms to create, and this TV has six.
+     */
     private void buildInputs() {
-        inputs.removeAllViews();
+        List<String> keys = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        List<Runnable> actions = new ArrayList<>();
 
         Intent liveTv = getPackageManager().getLeanbackLaunchIntentForPackage(liveTvPkg);
-        if (liveTv != null) addInputChip(getString(R.string.live_tv), () -> open(liveTv));
+        if (liveTv != null) {
+            keys.add("live");
+            labels.add(getString(R.string.live_tv));
+            actions.add(() -> open(liveTv));
+        }
 
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) {
@@ -834,12 +847,24 @@ public class HomeActivity extends Activity implements SceneView.Listener {
                 String label = l == null || l.length() == 0 ? "HDMI " + (i + 1) : l.toString();
                 if (!label.toUpperCase(Locale.ROOT).contains("HDMI")) label = "HDMI " + label;
                 final String id = info.getId();
-                addInputChip(label, () -> openInput(id));
+                keys.add("hdmi:" + id + ":" + label);
+                labels.add(label);
+                actions.add(() -> openInput(id));
             }
         }
 
         Intent usb = getPackageManager().getLeanbackLaunchIntentForPackage(usbPkg);
-        if (usb != null) addInputChip(getString(R.string.usb), () -> open(usb));
+        if (usb != null) {
+            keys.add("usb");
+            labels.add(getString(R.string.usb));
+            actions.add(() -> open(usb));
+        }
+
+        if (keys.equals(inputsKey)) return;   // same inputs: the chips already say so
+        inputsKey = keys;
+
+        inputs.removeAllViews();
+        for (int i = 0; i < labels.size(); i++) addInputChip(labels.get(i), actions.get(i));
 
         // A dropdown: Up and Down walk the list and stop at its ends, Left and Right go nowhere.
         int n = inputs.getChildCount();
@@ -849,7 +874,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
                     && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
                     || (keyCode == KeyEvent.KEYCODE_DPAD_UP && top) || (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && bottom)));
         }
-        if (n == 0) sources.setVisibility(View.GONE);   // no input on this set after all
+        // No input on this set after all, or one came back: the pill follows.
+        sources.setVisibility(n == 0 ? View.GONE : View.VISIBLE);
     }
 
     private void addInputChip(String label, Runnable action) {
