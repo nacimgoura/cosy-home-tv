@@ -33,7 +33,7 @@ android {
         versionName '2.0'
 
         ['location.name', 'location.latitude', 'location.longitude', 'dock', 'pinned', 'hidden',
-         'live_tv_package', 'usb_package', 'show_inputs'].each { key ->
+         'live_tv_package', 'usb_package', 'show_inputs', 'theme', 'mascot'].each { key ->
             resValue 'string', key.replace('.', '_'), resString(settings.getProperty(key, ''))
         }
     }

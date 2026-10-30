@@ -20,6 +20,7 @@ import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
@@ -67,6 +68,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private LinearLayout tileMenuItems;
     private View root, catTarget;
     private ImageView cat;
+    /** "koh" in cosy.properties: the statue and its text replace the cat, without the jump's flip. */
+    private boolean mascotMode;
     private ValueAnimator catJump;
 
     private List<String> dockApps, pinnedApps;
@@ -167,6 +170,14 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         if (!showInputs) sources.setVisibility(View.GONE);   // a streaming stick has no inputs
         root = findViewById(R.id.root);
         cat = findViewById(R.id.cat);
+        mascotMode = "koh".equals(getString(R.string.mascot));
+        if (mascotMode) {
+            ViewGroup.LayoutParams lp = cat.getLayoutParams();
+            lp.width = dp(44);
+            lp.height = dp(80);
+            cat.setLayoutParams(lp);
+            cat.setImageResource(R.drawable.koh_mascot);
+        }
         // Keep the cat on its tile while the tile zooms, the grid scrolls or the clock layer drifts.
         root.getViewTreeObserver().addOnPreDrawListener(() -> {
             if (catJump == null && catTarget != null) pinCat();
@@ -744,17 +755,19 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             return;
         }
         final float x0 = cat.getTranslationX(), y0 = cat.getTranslationY();
-        final float height = dp(32);
+        final float height = dp(mascotMode ? 22 : 32);
         // As quick as the focus zoom (240 ms), so the cat keeps up when the D-pad is held or pressed fast.
         catJump = ValueAnimator.ofFloat(0f, 1f).setDuration(200);
         catJump.setInterpolator(new AccelerateDecelerateInterpolator());
         catJump.addUpdateListener(a -> {
             float f = (float) a.getAnimatedValue();
             float[] end = catSpot(tile);   // the target zooms and scrolls while the cat is in the air
-            cat.setScaleX(end[0] < x0 ? -1f : 1f);
+            // The statue is not a cat: it glides, without the mirror flip or the tumble.
+            float dir = mascotMode ? 1f : (end[0] < x0 ? -1f : 1f);
+            cat.setScaleX(dir);
             cat.setTranslationX(x0 + (end[0] - x0) * f);
             cat.setTranslationY(y0 + (end[1] - y0) * f - height * 4f * f * (1f - f));
-            cat.setRotation((end[0] < x0 ? -1f : 1f) * 12f * (float) Math.sin(Math.PI * f));
+            cat.setRotation(mascotMode ? 0f : dir * 12f * (float) Math.sin(Math.PI * f));
         });
         catJump.addListener(new AnimatorListenerAdapter() {
             @Override

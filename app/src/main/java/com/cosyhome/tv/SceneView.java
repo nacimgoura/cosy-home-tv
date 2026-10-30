@@ -60,6 +60,10 @@ public class SceneView extends View {
     private static final Palette NIGHT = new Palette(0xFF04060E, 0xFF0B1230, 0xFF1A2550,
             0xFF161D36, 0xFF0E1326, 0xFF070A14, 0xFFFFB35C, 1f, false);
 
+    /** The Halloween skin: a permanent purple night, dark hills and an orange moon. */
+    private static final Palette HALLOWEEN = new Palette(0xFF160A2A, 0xFF2A1142, 0xFF3C1754,
+            0xFF140A20, 0xFF0B0514, 0xFF06020A, 0xFFFF8A2E, 1f, false);
+
     private static final float[][] STARS = {
             {180, 90, 2}, {420, 180, 1.6f}, {690, 70, 2.2f}, {930, 150, 1.4f}, {1150, 60, 2},
             {1320, 130, 1.5f}, {1720, 90, 2.2f}, {1830, 260, 1.4f}, {1080, 300, 1.4f}, {820, 380, 1.2f},
@@ -81,8 +85,14 @@ public class SceneView extends View {
     private final Paint fx = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path far = new Path(), mid = new Path(), near = new Path();
 
+    /** "halloween" in cosy.properties: the scene stays at night, in purple, with an orange moon. */
+    private final boolean halloween;
+    private final int moonColor;
+
     public SceneView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        halloween = "halloween".equals(context.getString(R.string.theme));
+        moonColor = halloween ? 0xFFFFB35C : 0xFFF1EAD8;
         far.moveTo(0, 720);
         far.cubicTo(240, 640, 420, 660, 640, 700);
         far.cubicTo(860, 740, 1040, 640, 1280, 650);
@@ -125,9 +135,11 @@ public class SceneView extends View {
     }
 
     void setPhase(Phase p) {
+        if (halloween) p = Phase.NIGHT;
         if (p == phase && still != null) return;
         phase = p;
-        pal = p == Phase.DAWN ? DAWN : p == Phase.DAY ? DAY : p == Phase.DUSK ? DUSK : NIGHT;
+        pal = halloween ? HALLOWEEN
+                : p == Phase.DAWN ? DAWN : p == Phase.DAY ? DAY : p == Phase.DUSK ? DUSK : NIGHT;
         rebuild();
     }
 
@@ -205,7 +217,7 @@ public class SceneView extends View {
                 glowDisc(c, 820, 706, 80, 0xFFFFC27E, 0xFFFFB46B, 0.45f);
                 break;
             case NIGHT:
-                glow(c, 1480, 230, 54, 0xFFF1EAD8, 0.16f);
+                glow(c, 1480, 230, 54, moonColor, 0.16f);
                 // The crescent: the moon's disc less an offset shadow disc, so the unlit part
                 // never reaches past the moon's edge (upstream cosy-home-tv f8436bf).
                 Path moon = new Path();
@@ -213,7 +225,7 @@ public class SceneView extends View {
                 Path shadow = new Path();
                 shadow.addCircle(1502, 216, 48, Path.Direction.CW);
                 moon.op(shadow, Path.Op.DIFFERENCE);
-                fill(c, moon, 0xFFF1EAD8);
+                fill(c, moon, moonColor);
                 break;
         }
 
