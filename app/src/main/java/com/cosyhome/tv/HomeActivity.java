@@ -173,8 +173,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         mascotMode = "koh".equals(getString(R.string.mascot));
         if (mascotMode) {
             ViewGroup.LayoutParams lp = cat.getLayoutParams();
-            lp.width = dp(48);   // the statue alone, a little larger than the cat
-            lp.height = dp(44);
+            lp.width = dp(71);   // the statue and its text, at 80dp tall
+            lp.height = dp(80);
             cat.setLayoutParams(lp);
             cat.setImageResource(R.drawable.koh_mascot);
         }
