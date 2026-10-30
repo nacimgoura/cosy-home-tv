@@ -173,7 +173,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         mascotMode = "koh".equals(getString(R.string.mascot));
         if (mascotMode) {
             ViewGroup.LayoutParams lp = cat.getLayoutParams();
-            lp.width = dp(44);
+            lp.width = dp(62);   // the mascot's 360x461 crop, at 80dp tall
             lp.height = dp(80);
             cat.setLayoutParams(lp);
             cat.setImageResource(R.drawable.koh_mascot);
